@@ -30,13 +30,13 @@
           input-paths (:pipeline.step/input-paths step)
           output-path (:pipeline.step/output-path step) 
           output-schema (:pipeline.step/output-schema step)
-          start-time (System/nanoTime)
           f (:pipeline.step/function step)
-          stop-time (System/nanoTime)
-          time-spent (/ (double (- stop-time start-time)) 1000000.0)
           args (map #(get-in context %) input-paths)]
       (try
-        (let [result (apply f args)
+        (let [start-time (System/nanoTime)
+              result (apply f args)
+              stop-time (System/nanoTime)
+              time-spent (/ (double (- stop-time start-time)) 1000000.0)
               context (assoc context output-path result)
               context (assoc context :pipeline/last-output result)
               context (update context :pipeline/trace append-trace step-name output-path result time-spent)]
