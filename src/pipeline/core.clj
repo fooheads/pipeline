@@ -17,10 +17,11 @@
   (m/schema
     [:sequential Step]))
 
-(defn- append-trace [trace step-name output-path result]
+(defn- append-trace [trace step-name output-path result time-spent]
   (concat trace [{:pipeline.step/name step-name
                   :key output-path 
-                  :value result}]))
+                  :value result
+                  :pipeline.step/time-spent time-spent}]))
 
 (defn run-step [context step options]
   (if (:pipeline/error context)
@@ -29,13 +30,16 @@
           input-paths (:pipeline.step/input-paths step)
           output-path (:pipeline.step/output-path step) 
           output-schema (:pipeline.step/output-schema step)
+          start-time (System/nanoTime)
           f (:pipeline.step/function step)
+          stop-time (System/nanoTime)
+          time-spent (/ (double (- stop-time start-time)) 1000000.0)
           args (map #(get-in context %) input-paths)]
       (try
         (let [result (apply f args)
               context (assoc context output-path result)
               context (assoc context :pipeline/last-output result)
-              context (update context :pipeline/trace append-trace step-name output-path result)]
+              context (update context :pipeline/trace append-trace step-name output-path result time-spent)]
 
           (if output-schema
             (if (m/validate output-schema result)
