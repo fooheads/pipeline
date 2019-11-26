@@ -89,7 +89,12 @@
 
     (is (= :get-current-year (:pipeline.step/name error)))
     (is (= "Problem!" (-> error :details (.getMessage))))
-    (is (= {:some :problem} (-> error :details ex-data)))))
+    (is (= {:some :problem} (-> error :details ex-data)))
+    (is (not= nil (re-find #"(?im):get-current-year" 
+                           (with-out-str (core/print-result)))))
+    (is (not= nil (re-find #"(?im)Problem" 
+                           (with-out-str (core/print-result)))))))
+
 
 (comment
   (def pipeline

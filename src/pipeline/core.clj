@@ -1,5 +1,6 @@
 (ns pipeline.core
   (:require
+    [clojure.string :as str]
     [clojure.pprint :refer [pprint print-table]]
     [malli.core :as m]))
 
@@ -10,7 +11,7 @@
      [:pipeline.step/type [:enum :action :transformation :validation]] 
      [:pipeline.step/function any?]
      [:pipeline.step/input-paths sequential?]
-     [:pipeline.step/output-path keyword?]
+     [:pipeline.step/output-path {:optional true} keyword?]
      [:pipeline.step/output-schema {:optional true} any?]]))
     
 (def ^:export Pipeline
@@ -68,14 +69,32 @@
 (defn last-result []
   *pipeline)
 
+(defn- print-exception [error]
+  (println 
+    (format (str/join 
+              "\n"
+              ["Error: Pipeline exited on step %s due to exception."
+               "Message: %s"
+               "(Exception object can be found with pipeline.core/exception"])
+            (:pipeline.step/name error)
+            (-> error :details .getMessage)))) 
+
+(defn- print-validation-error [error]
+  (println 
+    (format "Error: Pipeline exited on step %s due to %s. %s should not have been %s." 
+            (:pipeline.step/name error)
+            (:reason error)
+            (:key error)
+            (pr-str ((:key error) *pipeline)))))
+
+(defn- print-error [error]
+  (if (= (:reason error) :exception)
+    (print-exception error)
+    (print-validation-error)))
+
 (defn print-result []
   (if-let [error (:pipeline/error *pipeline)]
-    (println 
-      (format "Error: Pipeline exited on step %s due to %s. %s should not have been %s." 
-              (:pipeline.step/name error)
-              (:reason error)
-              (:key error)
-              (pr-str ((:key error) *pipeline))))
+    (print-error error)
     (println (format "Success"))))
 
 
