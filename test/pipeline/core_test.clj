@@ -2,19 +2,23 @@
   (:require 
     [clojure.test :refer :all]
     [malli.core :as m]
-    [pipeline.core :as core]))
+    [pipeline.core :as pipeline]
+    [pipeline.print]))
 
 (defn get-guitarist [guitarist-id]
   (get
-    {14 {:name "Jimi Hendrix" :born 1942 :died 1970}
-     15 {:name "Duane Allman" :born 1946 :died 1971}
-     16 {:name "Steve Vai"    :born 1960}}
+    {:jimi  {:name "Jimi Hendrix" :born 1942 :died 1970}
+     :duane {:name "Duane Allman" :born 1946 :died 1971}
+     :steve {:name "Steve Vai"    :born 1960}}
     guitarist-id))
 
 (defn calculate-age [born died current-year]
   (if died
     (- died born)
     (- current-year born)))
+
+(defn get-current-year []
+  2019)
 
 (def Guitarist
   (m/schema
@@ -34,7 +38,7 @@
 (def get-current-year-step
   {:pipeline.step/name :get-current-year
    :pipeline.step/type :action
-   :pipeline.step/function (constantly 2019)
+   :pipeline.step/function #'get-current-year
    :pipeline.step/input-paths []
    :pipeline.step/output-path :current-year
    :pipeline.step/output-schema int?})
@@ -47,53 +51,47 @@
    :pipeline.step/output-path :guitarist/age
    :pipeline.step/output-schema int?})
 
-(def failing-get-current-year-step
-  (assoc get-current-year-step :pipeline.step/function (constantly nil)))
-
-(def exception-get-current-year-step
-  (assoc get-current-year-step :pipeline.step/function #(throw (ex-info "Problem!" {:some :problem}))))
+(def example-pipeline
+  [get-guitarist-step
+   get-current-year-step
+   calculate-age-step])
 
 (deftest step-schema
-  (is (true? (m/validate core/Step get-guitarist-step))))
+  (is (true? (m/validate pipeline/Step get-guitarist-step))))
 
-(deftest simple-pipeline
-  (let [pipeline [get-guitarist-step
-                  get-current-year-step
-                  calculate-age-step]
-        run-pipeline #(core/run-pipeline {:guitarist-id %} pipeline)]
+(deftest successful-pipeline
+  (let [run-pipeline #(pipeline/run-pipeline {:guitarist-id %} example-pipeline)]
 
-    (is (= nil (:pipeline/error (run-pipeline 14))))
-    (is (= 28 (:guitarist/age (run-pipeline 14))))
+    (is (true? (pipeline/success? (run-pipeline :jimi))))
+    (is (= 28  (pipeline/get-output (run-pipeline :jimi))))
 
-    (is (= nil (:pipeline/error (run-pipeline 16))))
-    (is (= 59 (:guitarist/age (run-pipeline 16))))
+    (is (true? (pipeline/success? (run-pipeline :steve))))
+    (is (= 59  (pipeline/get-output (run-pipeline :steve))))
 
-    (is (= 59 (:pipeline/last-output (run-pipeline 16))))))
+    (is (= 59  (pipeline/get-output (run-pipeline :steve))))))
 
 (deftest failing-pipeline
-  (let [pipeline [get-guitarist-step
-                  failing-get-current-year-step
-                  calculate-age-step]
-        run-pipeline #(core/run-pipeline {:guitarist-id %} pipeline)
-        error (:pipeline/error (run-pipeline 16))]
+  ;; make get-current-year step return invalid data
+  (with-redefs [get-current-year (constantly nil)]  
+    (let [run-pipeline #(pipeline/run-pipeline {:guitarist-id %} example-pipeline)
+          error (pipeline/get-error (run-pipeline :steve))]
 
-    (is (= :get-current-year (:pipeline.step/name error)))
-    (is (= :current-year (:key error)))))
+      (is (= :get-current-year (:pipeline.step/name error)))
+      (is (= :current-year (:key error))))))
 
 (deftest exception-throwing-pipeline
-  (let [pipeline [get-guitarist-step
-                  exception-get-current-year-step
-                  calculate-age-step]
-        run-pipeline #(core/run-pipeline {:guitarist-id %} pipeline)
-        error (:pipeline/error (run-pipeline 16))]
+  ;; make get-current-year step throw exception
+  (with-redefs [get-current-year #(throw (ex-info "Problem!" {:some :problem}))]
+    (let [run-pipeline #(pipeline/run-pipeline {:guitarist-id %} example-pipeline)
+          error (:pipeline/error (run-pipeline :steve))]
 
-    (is (= :get-current-year (:pipeline.step/name error)))
-    (is (= "Problem!" (-> error :details (.getMessage))))
-    (is (= {:some :problem} (-> error :details ex-data)))
-    (is (not= nil (re-find #"(?im):get-current-year" 
-                           (with-out-str (core/print-result)))))
-    (is (not= nil (re-find #"(?im)Problem" 
-                           (with-out-str (core/print-result)))))))
+      (is (= :get-current-year (:pipeline.step/name error)))
+      (is (= "Problem!" (-> error :details (.getMessage))))
+      (is (= {:some :problem} (-> error :details ex-data)))
+      (is (not= nil (re-find #"(?im):get-current-year" 
+                             (with-out-str (pipeline.print/print-result)))))
+      (is (not= nil (re-find #"(?im)Problem" 
+                             (with-out-str (pipeline.print/print-result))))))))
 
 
 (comment
@@ -104,22 +102,22 @@
 
 
   ;; Example of a successful pipeline
-  (core/run-pipeline {:guitarist-id 16} pipeline)
-  (core/print-result)
-  (core/last-result)
+  (pipeline/run-pipeline {:guitarist-id :steve} pipeline)
+  (pipeline/print-result)
+  (pipeline/last-result)
 
   ;; Example of a failing pipeline
-  (core/run-pipeline {:guitarist-id -1} pipeline)
-  (core/print-result)
-  (core/last-result)
+  (pipeline/run-pipeline {:guitarist-id -1} pipeline)
+  (pipeline/print-result)
+  (pipeline/last-result)
 
   ;; Example of an exception throwing pipeline
-  (core/run-pipeline {:guitarist-id 16} 
+  (pipeline/run-pipeline {:guitarist-id :steve} 
                      [get-guitarist-step 
                       exception-get-current-year-step 
                       calculate-age-step])
-  (-> (core/last-result) :pipeline/error :details ex-data)
-  (core/print-result)
-  (core/last-result))
+  (-> (pipeline/last-result) :pipeline/error :details ex-data)
+  (pipeline/print-result)
+  (pipeline/last-result))
 
 
