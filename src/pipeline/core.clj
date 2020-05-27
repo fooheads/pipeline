@@ -14,7 +14,10 @@
   (m/schema
     [:map
      [:pipeline.step/name keyword?]
-     [:pipeline.step/type [:enum :action :transformation :validation]] 
+     [:pipeline.step/type [:enum 
+                           :pipeline.step.type/action 
+                           :pipeline.step.type/transformation 
+                           :pipeline.step.type/validation]] 
      [:pipeline.step/function any?]
      [:pipeline.step/input-paths sequential?]
      [:pipeline.step/output-path {:optional true} keyword?]
@@ -61,13 +64,15 @@
           (if output-schema
             (if (m/validate output-schema result)
               context
-              (assoc context :pipeline/error (merge step {:reason :invalid-output
-                                                          :key output-path
-                                                          :details (m/explain output-schema result)})))
+              (assoc context :pipeline/error (merge step {:pipeline.error/reason :pipeline.error.reason/invalid-output
+                                                          ;:key output-path
+                                                          :pipeline.error/value result
+                                                          :pipeline.error/message (m/explain output-schema result)})))
             context))
         (catch Exception e
-          (assoc context :pipeline/error (merge step {:reason :exception
-                                                      :details e})))))))
+          (assoc context :pipeline/error (merge step {:pipeline.error/reason :pipeline.error.reason/exception
+                                                      :pipeline.error/value e
+                                                      :pipeline.error/message (.getMessage e)})))))))
           
 
 (defn run-pipeline
@@ -131,6 +136,22 @@
    (when (failure? result)
      (:pipeline/error result))))
 
+(defn exception?
+  "Predicate that returns true if the pipeline run resulted in an exception. 
+  If no result is given as an argument, the stored result from the last run is used."
+  ([] (exception? (last-result)))
+  ([result]
+   (= (-> result get-error :pipeline.error/reason) :pipeline.error.reason/exception)))
+
+(defn get-exception
+  "Returns the exception from pipeline result, and nil if the pipeline did not end
+  with an exception.  If no result is given as an argument, the stored result from 
+  the last run is used."
+  ([] (get-exception (last-result)))
+  ([result]
+   (when (and (failure? result) 
+              (exception? result))
+     (:pipeline.error/value result))))
 
 (comment
   (ns pipeline.core)

@@ -12,21 +12,23 @@
     (format (str/join 
               "\n"
               ["Error: Pipeline exited on step %s due to exception."
+               "Reason: %s"
                "Message: %s"
-               "(Exception object can be found with pipeline.core/exception)"])
+               "Hint: Exception object can be found with (pipeline/get-exception)"])
             (:pipeline.step/name error)
-            (-> error :details .getMessage)))) 
+            (:pipeline.error/reason error)
+            (:pipeline.error/message error))))
 
 (defn- print-validation-error [error]
   (println 
-    (format "Error: Pipeline exited on step %s due to %s. %s should not have been %s." 
+    (format "Error: Pipeline exited on step %s due to %s.\nMessage: %s\nFailing value %s." 
             (:pipeline.step/name error)
-            (:reason error)
-            (:key error)
-            (pr-str ((:key error) pipeline/*pipeline)))))
+            (:pipeline.error/reason error)
+            (:pipeline.error/message error)
+            (pr-str (:pipeline.error/value error)))))
 
 (defn- print-error [error]
-  (if (= (:reason error) :exception)
+  (if (= (:pipeline.error/reason error) :pipeline.error.reason/exception)
     (print-exception error)
     (print-validation-error)))
 
