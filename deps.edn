@@ -5,14 +5,14 @@
  :aliases
  {
   :test
-  {:extra-paths ["test"]
-    :extra-deps {lambdaisland/kaocha {:mvn/version "0.0-573"}
-                 lambdaisland/kaocha-junit-xml {:mvn/version "0.0-70"}}
+  {;:extra-paths ["test" "examples"]
+   :extra-deps {lambdaisland/kaocha {:mvn/version "0.0-573"}
+                lambdaisland/kaocha-junit-xml {:mvn/version "0.0-70"}}
 
-    :main-opts  ["-m" "kaocha.runner"
-                 "--plugin" "capture-output"
-                 "--plugin" "junit-xml"
-                 "--junit-xml-file" "target/test-results/kaocha/unit-test-result.xml"]}}}
+   :main-opts  ["-m" "kaocha.runner"
+                "--plugin" "capture-output"
+                "--plugin" "junit-xml"
+                "--junit-xml-file" "target/test-results/kaocha/unit-test-result.xml"]}}}
 
 
 
