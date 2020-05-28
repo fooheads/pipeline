@@ -9,7 +9,7 @@ Description will come later. See tests for examples.
 
 * [x] Move examples from test to examples
 * [x] Replace malli with spec
-* [ ] Add action and transformation construction functions
+* [x] Add action and transformation construction functions
 * [ ] Add missing accessors
 * [ ] add pipeline binding and get-binding accessor
 * [ ] add step binding and get-step-binding and a second optional argument to get-binding

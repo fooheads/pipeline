@@ -171,6 +171,30 @@
               (exception? result))
      (:pipeline.error/value result))))
 
+(defn action
+  ([step-name f inputs]
+   (action step-name f inputs nil nil))
+  ([step-name f inputs output]
+   (action step-name f inputs output nil))
+  ([step-name f inputs output output-spec]
+   {:pipeline.step/name step-name
+    :pipeline.step/type :action
+    :pipeline.step/function f
+    :pipeline.step/input-paths inputs
+    :pipeline.step/output-path output
+    :pipeline.step/output-schema output-spec}))
+
+(defn transformation
+  ([step-name f inputs output]
+   (action step-name f inputs output nil))
+  ([step-name f inputs output output-spec]
+   {:pipeline.step/name step-name
+    :pipeline.step/type :transformation
+    :pipeline.step/function f
+    :pipeline.step/input-paths inputs
+    :pipeline.step/output-path output
+    :pipeline.step/output-schema output-spec}))
+
 (comment
   (ns pipeline.core)
   (last-result)

@@ -28,29 +28,15 @@
                                     :opt-un [:guitarist/died]))
 
 (def get-guitarist-step
-  {:pipeline.step/name :get-guitarist
-   :pipeline.step/type :action
-   :pipeline.step/function #'get-guitarist
-   :pipeline.step/input-paths [[:guitarist-id]]
-   :pipeline.step/output-path :guitarist})
-   ;:pipeline.step/output-schema :guitarist/guitarist})
+  (pipeline/action :get-guitarist #'get-guitarist [[:guitarist-id]] :guitarist))
 
 (def get-current-year-step
-  {:pipeline.step/name :get-current-year
-   :pipeline.step/type :action
-   :pipeline.step/function #'get-current-year
-   :pipeline.step/input-paths []
-   :pipeline.step/output-path :current-year
-   :pipeline.step/output-schema int?})
+   (pipeline/action :get-current-year #'get-current-year [] :current-year int?))
 
 (def calculate-age-step
-  {:pipeline.step/name :calculate-age
-   :pipeline.step/type :transformation
-   :pipeline.step/function #'calculate-age
-   :pipeline.step/input-paths [[:guitarist :born] [:guitarist :died] [:current-year]]
-   :pipeline.step/output-path :guitarist/age
-   :pipeline.step/output-schema int?})
-
+   (pipeline/transformation :calculate-age #'calculate-age
+                            [[:guitarist :born] [:guitarist :died] [:current-year]]
+                            :guitarist/age int?))
 (def example-pipeline
   [get-guitarist-step
    get-current-year-step
