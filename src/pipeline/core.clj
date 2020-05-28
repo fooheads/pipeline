@@ -1,5 +1,5 @@
 (ns pipeline.core
-  "The core of pipeline. This is where the definition and running 
+  "The core of pipeline. This is where the definition and running
   of the pipelines exists."
   (:require
     [clojure.string :as str]
@@ -8,21 +8,21 @@
 
 ;;;
 ;;; Schemas
-;;; 
+;;;
 
 (def ^:export Step
   (m/schema
     [:map
      [:pipeline.step/name keyword?]
-     [:pipeline.step/type [:enum 
-                           :pipeline.step.type/action 
-                           :pipeline.step.type/transformation 
-                           :pipeline.step.type/validation]] 
+     [:pipeline.step/type [:enum
+                           :action
+                           :transformation
+                           :validation]]
      [:pipeline.step/function any?]
      [:pipeline.step/input-paths sequential?]
      [:pipeline.step/output-path {:optional true} keyword?]
      [:pipeline.step/output-schema {:optional true} any?]]))
-    
+
 (def ^:export Pipeline
   (m/schema
     [:sequential Step]))
@@ -48,7 +48,7 @@
     (reduced context)
     (let [step-name (:pipeline.step/name step)
           input-paths (:pipeline.step/input-paths step)
-          output-path (:pipeline.step/output-path step) 
+          output-path (:pipeline.step/output-path step)
           output-schema (:pipeline.step/output-schema step)
           f (:pipeline.step/function step)
           args (map #(get-in context %) input-paths)]
@@ -64,32 +64,32 @@
           (if output-schema
             (if (m/validate output-schema result)
               context
-              (assoc context :pipeline/error (merge step {:pipeline.error/reason :pipeline.error.reason/invalid-output
+              (assoc context :pipeline/error (merge step {:pipeline.error/reason :invalid-output
                                                           ;:key output-path
                                                           :pipeline.error/value result
                                                           :pipeline.error/message (m/explain output-schema result)})))
             context))
         (catch Exception e
-          (assoc context :pipeline/error (merge step {:pipeline.error/reason :pipeline.error.reason/exception
+          (assoc context :pipeline/error (merge step {:pipeline.error/reason :exception
                                                       :pipeline.error/value e
                                                       :pipeline.error/message (.getMessage e)})))))))
-          
+
 
 (defn run-pipeline
   "Executes a pipeline and returns the full execution context as a result. In the execution context,
   result and errors can be found, but also a full trace of each step's input, output and time spent.
-  
+
   Options can be given to run-pipeline, but there are not yet any options defined.
-  
+
   Even though run-pipeline returns the full execution context, it's recommended to use the helper
   functions in this package to extract data for common tasks. This protects you slightly from
   breaking changes in the data structure since this is still pre-alpha.
-  
+
   The last pipeline result (the full execution context) is stored in pipeline.core/*pipeline as well as returned"
 
   ([initial-context pipeline]
    (run-pipeline initial-context pipeline {}))
-  
+
   ([initial-context pipeline options]
    (assert (m/validate Pipeline pipeline) "Not a valid pipeline!")
    (let [result (reduce (fn [context step] (run-step context step options)) initial-context pipeline)]
@@ -100,12 +100,12 @@
 ;;; Helper functions
 ;;;
 
-(defn last-result 
-  "Returns the stored result from the last call to run-pipeline" 
+(defn last-result
+  "Returns the stored result from the last call to run-pipeline"
   []
   *pipeline)
 
-(defn success? 
+(defn success?
   "Predicate that returns true if the pipeline result was a success. If no
   result is given as an argument, the stored result from the last run is used."
   ([] (success? (last-result)))
@@ -113,14 +113,14 @@
    (not (:pipeline/error result))))
 
 (defn failure?
-  "Predicate that returns true if the pipeline run resulted in an error. 
+  "Predicate that returns true if the pipeline run resulted in an error.
   If no result is given as an argument, the stored result from the last run is used."
   ([] (failure? (last-result)))
   ([result]
    (not (success? result))))
 
 (defn get-output
-  "Returns the output from the last step if the run was successfulr. Always 
+  "Returns the output from the last step if the run was successfulr. Always
   returns nil if the run failed.
   If no result is given as an argument, the stored result from the last run is used."
   ([] (get-output (last-result)))
@@ -137,19 +137,19 @@
      (:pipeline/error result))))
 
 (defn exception?
-  "Predicate that returns true if the pipeline run resulted in an exception. 
+  "Predicate that returns true if the pipeline run resulted in an exception.
   If no result is given as an argument, the stored result from the last run is used."
   ([] (exception? (last-result)))
   ([result]
-   (= (-> result get-error :pipeline.error/reason) :pipeline.error.reason/exception)))
+   (= (-> result get-error :pipeline.error/reason) :exception)))
 
 (defn get-exception
   "Returns the exception from pipeline result, and nil if the pipeline did not end
-  with an exception.  If no result is given as an argument, the stored result from 
+  with an exception.  If no result is given as an argument, the stored result from
   the last run is used."
   ([] (get-exception (last-result)))
   ([result]
-   (when (and (failure? result) 
+   (when (and (failure? result)
               (exception? result))
      (:pipeline.error/value result))))
 

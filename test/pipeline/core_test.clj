@@ -1,5 +1,5 @@
 (ns pipeline.core-test
-  (:require 
+  (:require
     [clojure.test :refer :all]
     [malli.core :as m]
     [pipeline.core :as pipeline]
@@ -26,10 +26,10 @@
      [:name string?]
      [:born int?]
      [:died {:optional true} int?]]))
-    
+
 (def get-guitarist-step
   {:pipeline.step/name :get-guitarist
-   :pipeline.step/type :pipeline.step.type/action
+   :pipeline.step/type :action
    :pipeline.step/function #'get-guitarist
    :pipeline.step/input-paths [[:guitarist-id]]
    :pipeline.step/output-path :guitarist
@@ -37,7 +37,7 @@
 
 (def get-current-year-step
   {:pipeline.step/name :get-current-year
-   :pipeline.step/type :pipeline.step.type/action
+   :pipeline.step/type :action
    :pipeline.step/function #'get-current-year
    :pipeline.step/input-paths []
    :pipeline.step/output-path :current-year
@@ -45,7 +45,7 @@
 
 (def calculate-age-step
   {:pipeline.step/name :calculate-age
-   :pipeline.step/type :pipeline.step.type/transformation
+   :pipeline.step/type :transformation
    :pipeline.step/function #'calculate-age
    :pipeline.step/input-paths [[:guitarist :born] [:guitarist :died] [:current-year]]
    :pipeline.step/output-path :guitarist/age
@@ -74,7 +74,7 @@
 
 (deftest failing-pipeline
   ;; make get-current-year step return invalid data
-  (with-redefs [get-current-year (constantly nil)]  
+  (with-redefs [get-current-year (constantly nil)]
     (let [run-pipeline #(pipeline/run-pipeline {:guitarist-id %} example-pipeline)
           error (pipeline/get-error (run-pipeline :steve))]
 
@@ -94,9 +94,9 @@
       (is (= :get-current-year (:pipeline.step/name error)))
       (is (= "Problem!" (:pipeline.error/message error)))
       (is (= {:some :problem} (-> error :pipeline.error/value ex-data)))
-      (is (not= nil (re-find #"(?im):get-current-year" 
+      (is (not= nil (re-find #"(?im):get-current-year"
                              (with-out-str (pipeline.print/print-result)))))
-      (is (not= nil (re-find #"(?im)Problem" 
+      (is (not= nil (re-find #"(?im)Problem"
                              (with-out-str (pipeline.print/print-result))))))))
 
 
@@ -119,9 +119,9 @@
   (pipeline/last-result)
 
   ;; Example of an exception throwing pipeline
-  (pipeline/run-pipeline {:guitarist-id :steve} 
-                     [get-guitarist-step 
-                      exception-get-current-year-step 
+  (pipeline/run-pipeline {:guitarist-id :steve}
+                     [get-guitarist-step
+                      exception-get-current-year-step
                       calculate-age-step])
   (pipeline/print-result)
   (pipeline/last-result))
@@ -138,7 +138,7 @@
 
 (def get-guitarist-step
   {:pipeline.step/name :get-guitarist
-   :pipeline.step/type :pipeline.step.type/action
+   :pipeline.step/type :action
    :pipeline.step/function   {:jimi  {:name "Jimi Hendrix" :born 1942 :died 1970}
                               :duane {:name "Duane Allman" :born 1946 :died 1971}
                               :steve {:name "Steve Vai"    :born 1960}}
@@ -148,7 +148,7 @@
 
 (def get-guitarist-step
   {:pipeline.step/name :get-guitarist
-   :pipeline.step/type :pipeline.step.type/action
+   :pipeline.step/type :action
    :pipeline.step/function identity
    :pipeline.step/input-paths [[:guitarists]]
    :pipeline.step/output-path :all-guitarists})
@@ -156,7 +156,7 @@
 
 (def get-current-year-step
   {:pipeline.step/name :get-current-year
-   :pipeline.step/type :pipeline.step.type/action
+   :pipeline.step/type :action
    :pipeline.step/function #'get-current-year
    :pipeline.step/input-paths []
    :pipeline.step/output-path :current-year
@@ -164,24 +164,26 @@
 
 (def calculate-age-step
   {:pipeline.step/name :calculate-age
-   :pipeline.step/type :pipeline.step.type/transformation
+   :pipeline.step/type :transformation
    :pipeline.step/function #'calculate-age
    :pipeline.step/input-paths [[:guitarist :born] [:guitarist :died] [:current-year]]
    :pipeline.step/output-path :guitarist/age
    :pipeline.step/output-schema int?})
 
 (def pipeline
-  [get-guitarist-step])
-   ;get-current-year-step
-   ;calculate-age-step])
+  [get-guitarist-step
+   get-current-year-step
+   calculate-age-step])
 
 (def data
   {:guitarists
     {:jimi  {:name "Jimi Hendrix" :born 1942 :died 1970}
      :duane {:name "Duane Allman" :born 1946 :died 1971}
-     :steve {:name "Steve Vai"    :born 1960}}}) 
+     :steve {:name "Steve Vai"    :born 1960}}})
 
-(pipeline/run-pipeline data pipeline)
+(->>
+  (pipeline/run-pipeline data pipeline)
+  (pipeline/get-output))
 
 (pipeline/run-pipeline {:guitarist-id :steve} pipeline)
 (require '[malli.core :as m])
