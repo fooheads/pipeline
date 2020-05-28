@@ -1,6 +1,5 @@
 {:deps
- {philoskim/debux-stubs              {:mvn/version "0.5.6"}
-  metosin/malli                      {:git/url "https://github.com/metosin/malli"
+ {philoskim/debux-stubs              {:mvn/version "0.5.6"
                                       :sha "e2ff736ff923c676de655b853180be2503715d88"}}
  :aliases
  {

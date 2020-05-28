@@ -7,11 +7,11 @@ Description will come later. See tests for examples.
 
 ## TODO
 
-* [ ] Move examples from test to examples
-* [ ] Replace malli with spec
+* [x] Move examples from test to examples
+* [x] Replace malli with spec
 * [ ] Add action and transformation construction functions
 * [ ] Add missing accessors
-* [ ] add pipeline binding and get-binding accessor 
+* [ ] add pipeline binding and get-binding accessor
 * [ ] add step binding and get-step-binding and a second optional argument to get-binding
 * [ ] param "spec" (required keys and preds)
 * [ ] print/return pipeline (static structure)

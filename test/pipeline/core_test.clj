@@ -1,7 +1,7 @@
 (ns pipeline.core-test
   (:require
     [clojure.test :refer :all]
-    [malli.core :as m]
+    [clojure.spec.alpha :as s]
     [pipeline.core :as pipeline]
     [pipeline.print]))
 
@@ -20,20 +20,20 @@
 (defn get-current-year []
   2019)
 
-(def Guitarist
-  (m/schema
-    [:map
-     [:name string?]
-     [:born int?]
-     [:died {:optional true} int?]]))
+(s/def :guitarist/name string?)
+(s/def :guitarist/born integer?)
+(s/def :guitarist/died integer?)
+
+(s/def :guitarist/guitarist (s/keys :req-un [:guitarist/name :guitarist/born]
+                                    :opt-un [:guitarist/died]))
 
 (def get-guitarist-step
   {:pipeline.step/name :get-guitarist
    :pipeline.step/type :action
    :pipeline.step/function #'get-guitarist
    :pipeline.step/input-paths [[:guitarist-id]]
-   :pipeline.step/output-path :guitarist
-   :pipeline.step/output-schema Guitarist})
+   :pipeline.step/output-path :guitarist})
+   ;:pipeline.step/output-schema :guitarist/guitarist})
 
 (def get-current-year-step
   {:pipeline.step/name :get-current-year
@@ -56,10 +56,10 @@
    get-current-year-step
    calculate-age-step])
 
-(m/explain pipeline/Pipeline example-pipeline)
+(s/explain :pipeline/pipeline example-pipeline)
 
 (deftest step-schema
-  (is (true? (m/validate pipeline/Step get-guitarist-step))))
+  (is (true? (s/valid? :pipeline/step get-guitarist-step))))
 
 (deftest successful-pipeline
   (let [run-pipeline #(pipeline/run-pipeline example-pipeline {:guitarist-id %})]

@@ -1,15 +1,15 @@
 (ns pipeline.example
   (:require
-    [malli.core :as m]
+    [clojure.spec.alpha :as s]
     [pipeline.core :as pipeline]
     [pipeline.print]))
 
-(def Guitarist
-  (m/schema
-    [:map
-     [:name string?]
-     [:born int?]
-     [:died {:optional true} int?]]))
+(s/def :guitarist/name string?)
+(s/def :guitarist/born integer?)
+(s/def :guitarist/died integer?)
+
+(s/def :guitarist/guitarist (s/keys :req-un [:guitarist/name :guitarist/born]
+                                    :opt-un [:guitarist/died]))
 
 (defn get-guitarist [guitarist-id]
   (get
@@ -84,8 +84,7 @@
   (pipeline/get-output))
 
 (pipeline/run-pipeline pipeline {:guitarist-id :steve})
-(require '[malli.core :as m])
-(m/explain pipeline/Pipeline pipeline)
+(s/explain :pipeline/pipeline pipeline)
 
 
 ;; Example of a successful pipeline

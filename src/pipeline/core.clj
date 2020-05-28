@@ -2,9 +2,10 @@
   "The core of pipeline. This is where the definition and running
   of the pipelines exists."
   (:require
+    [clojure.spec.alpha :as s]
     [clojure.string :as str]
-    [clojure.pprint :refer [pprint print-table]]
-    [malli.core :as m]))
+    [clojure.pprint :refer [pprint print-table]]))
+    ;[malli.core :as m]))
 
 ;;
 ;; Ideas
@@ -18,22 +19,29 @@
 ;;; Schemas
 ;;;
 
-(def ^:export Step
-  (m/schema
-    [:map
-     [:pipeline.step/name keyword?]
-     [:pipeline.step/type [:enum
-                           :action
-                           :transformation
-                           :validation]]
-     [:pipeline.step/function any?]
-     [:pipeline.step/input-paths sequential?]
-     [:pipeline.step/output-path {:optional true} keyword?]
-     [:pipeline.step/output-schema {:optional true} any?]]))
+(s/def :pipeline.step/name keyword?)
+(s/def :pipeline.step/type #{:action :transformation :validation})
+(s/def :pipeline.step/function any?)
+(s/def :pipeline.step/input-paths sequential?)
+(s/def :pipeline.step/output-path keyword?)
+(s/def :pipeline.step/output-schema any?)
 
-(def ^:export Pipeline
-  (m/schema
-    [:sequential Step]))
+(s/def :pipeline/step
+  (s/keys :req [:pipeline.step/name
+                :pipeline.step/type
+                :pipeline.step/function
+                :pipeline.step/input-paths]
+          :opt [:pipeline.step/output-path
+                :pipeline.step/output-schema]))
+
+(s/def :pipeline/pipeline
+  (s/coll-of :pipeline/step))
+
+(defn valid? [pipeline]
+  (s/valid? :pipeline/pipeline pipeline))
+
+(defn explain [pipeline]
+  (s/explain :pipeline/pipeline pipeline))
 
 ;;;
 ;;; private
@@ -70,12 +78,12 @@
               context (update context :pipeline/trace append-trace step result time-spent)]
 
           (if output-schema
-            (if (m/validate output-schema result)
+            (if (s/valid? output-schema result)
               context
               (assoc context :pipeline/error (merge step {:pipeline.error/reason :invalid-output
                                                           ;:key output-path
                                                           :pipeline.error/value result
-                                                          :pipeline.error/message (m/explain output-schema result)})))
+                                                          :pipeline.error/message (s/explain output-schema result)})))
             context))
         (catch Exception e
           (assoc context :pipeline/error (merge step {:pipeline.error/reason :exception
@@ -100,7 +108,8 @@
    (run-pipeline pipeline initial-context {}))
 
   ([pipeline initial-context options]
-   (assert (m/validate Pipeline pipeline) "Not a valid pipeline!")
+   (assert (valid? pipeline) "Not a valid pipeline!")
+
    (let [result (reduce (fn [context step] (run-step context step options)) initial-context pipeline)]
      (def *pipeline result)
      result)))

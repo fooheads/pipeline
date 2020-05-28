@@ -4,7 +4,6 @@
   (:require
     [clojure.string :as str]
     [clojure.pprint :refer [pprint print-table]]
-    [malli.core :as m]
     [pipeline.core :as pipeline]))
 
 (defn- print-exception [error]
@@ -30,7 +29,7 @@
 (defn- print-error [error]
   (if (= (:pipeline.error/reason error) :exception)
     (print-exception error)
-    (print-validation-error)))
+    (print-validation-error error)))
 
 (defn print-result
   "Prints the result of the last or given in a human friendly way."
