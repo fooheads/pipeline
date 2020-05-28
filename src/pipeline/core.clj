@@ -6,6 +6,14 @@
     [clojure.pprint :refer [pprint print-table]]
     [malli.core :as m]))
 
+;;
+;; Ideas
+;;
+;; "Print failed call" in the pipeline result? Very useful in logs, application
+;; insight and such.
+;;
+
+
 ;;;
 ;;; Schemas
 ;;;
@@ -74,6 +82,7 @@
                                                       :pipeline.error/value e
                                                       :pipeline.error/message (.getMessage e)})))))))
 
+;; Add functions to validate / explain pipeline
 
 (defn run-pipeline
   "Executes a pipeline and returns the full execution context as a result. In the execution context,
@@ -87,10 +96,10 @@
 
   The last pipeline result (the full execution context) is stored in pipeline.core/*pipeline as well as returned"
 
-  ([initial-context pipeline]
-   (run-pipeline initial-context pipeline {}))
+  ([pipeline initial-context] ; TODO: initial-context -> args
+   (run-pipeline pipeline initial-context {}))
 
-  ([initial-context pipeline options]
+  ([pipeline initial-context options]
    (assert (m/validate Pipeline pipeline) "Not a valid pipeline!")
    (let [result (reduce (fn [context step] (run-step context step options)) initial-context pipeline)]
      (def *pipeline result)
@@ -119,7 +128,7 @@
   ([result]
    (not (success? result))))
 
-(defn get-output
+(defn get-output  ;; rename to result
   "Returns the output from the last step if the run was successfulr. Always
   returns nil if the run failed.
   If no result is given as an argument, the stored result from the last run is used."
@@ -128,7 +137,7 @@
    (when (success? result)
      (:pipeline/last-output result))))
 
-(defn get-error
+(defn get-error   ;; error
   "Returns the error from pipeline result, and nil if the run was successful.
   If no result is given as an argument, the stored result from the last run is used."
   ([] (get-error (last-result)))
@@ -143,7 +152,7 @@
   ([result]
    (= (-> result get-error :pipeline.error/reason) :exception)))
 
-(defn get-exception
+(defn get-exception   ;; exception
   "Returns the exception from pipeline result, and nil if the pipeline did not end
   with an exception.  If no result is given as an argument, the stored result from
   the last run is used."
@@ -161,5 +170,38 @@
   (failure? (last-result))
   (pipeline.core/print-problematic-call)
 
-  (clojure.test/run-tests 'pipeline.core-test))
+  (clojure.test/run-tests 'pipeline.core-test)
+
+  (def context (get-initial-context *pipeline))
+
+  (defn run-step! [context f input output])
+
+  (->
+   [(action fjdbc/execute [:data-source :relation-query-work-orders] :work-orders)
+    (transformation normalize [:work-orders :normalization-spec])]
+   (pipeline/run! initial))
+
+
+
+  :get-tenant | "....."
+  :wor        | 34
+
+  (run-pipeline-to! pipeline 3)
+
+  (my-next-fn (:foo context) (:bar context)))
+
+(comment
+  (defn normalize [normalization-spec set-of-trees])
+
+  {:steps [{:name :normalize
+            :function #'normalize
+            :binding {:normalization-spec [[:AppointmentDetails/AppointmentDetailsID] ,,,]}
+            :input-paths [[:normalization-spec] [:result-trees]]
+            :output-path :normalized-trees}]
+   :binding {:spm-auth-key "sdfjhkjlh12322"}
+   :params {:data-source #'data-source?
+            :spm-url #'url?}
+   :repl {:datasource "@repl/ds"}})
+
+
 
