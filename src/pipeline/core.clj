@@ -47,14 +47,36 @@
 ;;; private
 ;;;
 
-(defn- append-trace [trace step result time-spent]
-  (concat trace [(merge step {:pipeline.step-result/value result
-                              :pipeline.step-result/time-spent time-spent})]))
+(defn- step-execution-success [step args result time-spent]
+  (merge
+    (select-keys step [:pipeline.step/name])
+    {:pipeline.step-execution/args args
+     :pipeline.step-execution/result result
+     :pipeline.step-execution/time-spent time-spent}))
+
+(defn- step-execution-error [step args reason value message time-spent]
+  (merge
+    (select-keys step [:pipeline.step/name])
+    {:pipeline.step-execution/args args
+     :pipeline.step-execution/time-spent time-spent}
+    {:pipeline.error/reason reason
+     :pipeline.error/value value
+     :pipeline.error/message message}))
 
 ;;;
 ;;; public
 ;;;
 
+
+;;
+;;
+;;
+;; ======================================================
+;; TODO: Make thing work with state under :pipeline/state
+;; ======================================================
+;;
+;;
+;;
 
 (defn run-step [context step options]
   "Runs a single step. This is called from run-pipeline and normally not used directly,
@@ -67,34 +89,49 @@
           output-path (:pipeline.step/output-path step)
           output-schema (:pipeline.step/output-schema step)
           f (:pipeline.step/function step)
-          args (map #(get-in context %) input-paths)]
+          args (map
+                 (fn [input-path]
+                   (let [path (cons :pipeline/state input-path)]
+                     (get-in context path)))
+                 input-paths)]
       (try
         (let [start-time (System/nanoTime)
               result (apply f args)
               stop-time (System/nanoTime)
               time-spent (/ (double (- stop-time start-time)) 1000000.0)
-              context (assoc context output-path result)
-              context (assoc context :pipeline/last-output result)
-              context (update context :pipeline/trace append-trace step result time-spent)]
+              context (assoc-in context [:pipeline/state output-path] result)
+              context (update context :pipeline/step-executions conj (step-execution-success step args result time-spent))]
 
           (if output-schema
             (if (s/valid? output-schema result)
               context
-              (assoc context :pipeline/error (merge step {:pipeline.error/reason :invalid-output
-                                                          ;:key output-path
-                                                          :pipeline.error/value result
-                                                          :pipeline.error/message (s/explain output-schema result)})))
+              (let [reason :invalid-output
+                    value result
+                    message (s/explain output-schema value)]
+                (->
+                  context
+                  (update :pipeline/step-executions conj (step-execution-error step args reason value message time-spent))
+                  ;; HERE - add error to step-executions
+                  (assoc :pipeline/error (merge step {:pipeline.error/reason reason
+                                                      :pipeline.error/value value
+                                                      :pipeline.error/message message})))))
             context))
         (catch Exception e
-          (assoc context :pipeline/error (merge step {:pipeline.error/reason :exception
-                                                      :pipeline.error/value e
-                                                      :pipeline.error/message (.getMessage e)})))))))
+          (let [reason :exception
+                value e
+                message (.getMessage e)]
+            (->
+              context
+              (update :pipeline/step-executions conj (step-execution-error step args reason value message nil))
+              (assoc :pipeline/error (merge step {:pipeline.error/reason :exception
+                                                  :pipeline.error/value value
+                                                  :pipeline.error/message message})))))))))
 
 ;; Add functions to validate / explain pipeline
 
 (defn run-pipeline
   "Executes a pipeline and returns the full execution context as a result. In the execution context,
-  result and errors can be found, but also a full trace of each step's input, output and time spent.
+  result and errors can be found, but also a full trace of each step's input, result and time spent.
 
   Options can be given to run-pipeline, but there are not yet any options defined.
 
@@ -104,13 +141,14 @@
 
   The last pipeline result (the full execution context) is stored in pipeline.core/*pipeline as well as returned"
 
-  ([pipeline initial-context] ; TODO: initial-context -> args
-   (run-pipeline pipeline initial-context {}))
+  ([pipeline args]
+   (run-pipeline pipeline args {}))
 
-  ([pipeline initial-context options]
+  ([pipeline args options]
    (assert (valid? pipeline) "Not a valid pipeline!")
 
-   (let [result (reduce (fn [context step] (run-step context step options)) initial-context pipeline)]
+   (let [context {:pipeline/steps pipeline :pipeline/step-executions [] :pipeline/state args}
+         result (reduce (fn [context step] (run-step context step options)) context pipeline)]
      (def *pipeline result)
      result)))
 
@@ -118,7 +156,7 @@
 ;;; Helper functions
 ;;;
 
-(defn last-result
+(defn last-run
   "Returns the stored result from the last call to run-pipeline"
   []
   *pipeline)
@@ -126,14 +164,14 @@
 (defn success?
   "Predicate that returns true if the pipeline result was a success. If no
   result is given as an argument, the stored result from the last run is used."
-  ([] (success? (last-result)))
+  ([] (success? (last-run)))
   ([result]
    (not (:pipeline/error result))))
 
 (defn failure?
   "Predicate that returns true if the pipeline run resulted in an error.
   If no result is given as an argument, the stored result from the last run is used."
-  ([] (failure? (last-result)))
+  ([] (failure? (last-run)))
   ([result]
    (not (success? result))))
 
@@ -141,15 +179,15 @@
   "Returns the output from the last step if the run was successfulr. Always
   returns nil if the run failed.
   If no result is given as an argument, the stored result from the last run is used."
-  ([] (get-output (last-result)))
+  ([] (get-output (last-run)))
   ([result]
    (when (success? result)
-     (:pipeline/last-output result))))
+     (some->> result :pipeline/step-executions last :pipeline.step-execution/result))))
 
 (defn get-error   ;; error
   "Returns the error from pipeline result, and nil if the run was successful.
   If no result is given as an argument, the stored result from the last run is used."
-  ([] (get-error (last-result)))
+  ([] (get-error (last-run)))
   ([result]
    (when (failure? result)
      (:pipeline/error result))))
@@ -157,7 +195,7 @@
 (defn exception?
   "Predicate that returns true if the pipeline run resulted in an exception.
   If no result is given as an argument, the stored result from the last run is used."
-  ([] (exception? (last-result)))
+  ([] (exception? (last-run)))
   ([result]
    (= (-> result get-error :pipeline.error/reason) :exception)))
 
@@ -165,11 +203,11 @@
   "Returns the exception from pipeline result, and nil if the pipeline did not end
   with an exception.  If no result is given as an argument, the stored result from
   the last run is used."
-  ([] (get-exception (last-result)))
+  ([] (get-exception (last-run)))
   ([result]
    (when (and (failure? result)
               (exception? result))
-     (:pipeline.error/value result))))
+     (some->> result :pipeline/step-executions last :pipeline.error/value))))
 
 (defn action
   ([step-name f inputs]
@@ -197,10 +235,10 @@
 
 (comment
   (ns pipeline.core)
-  (last-result)
+  (last-run)
   (print-result)
-  (boolean (:pipeline/error (last-result)))
-  (failure? (last-result))
+  (boolean (:pipeline/error (last-run)))
+  (failure? (last-run))
   (pipeline.core/print-problematic-call)
 
   (clojure.test/run-tests 'pipeline.core-test)

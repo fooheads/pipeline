@@ -33,7 +33,7 @@
 
 (defn print-result
   "Prints the result of the last or given in a human friendly way."
-  ([] (print-result (pipeline/last-result)))
+  ([] (print-result (pipeline/last-run)))
   ([result]
    (if (pipeline/success? result)
      (println (format "Success!\n\n%s" (pr-str (pipeline/get-output result))))
@@ -43,7 +43,7 @@
   "Prints the call that failed as close as possible to what a conctete call
   would look like. Normally, this output can be pasted into the REPL and
   executed for further debugging"
-  ([] (print-failed-call (pipeline/last-result)))
+  ([] (print-failed-call (pipeline/last-run)))
   ([result]
    (when (pipeline/failure? result)
      (let [step (-> result :pipeline/error)

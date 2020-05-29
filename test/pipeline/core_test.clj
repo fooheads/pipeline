@@ -5,6 +5,13 @@
     [pipeline.core :as pipeline]
     [pipeline.print]))
 
+(s/def :guitarist/name string?)
+(s/def :guitarist/born integer?)
+(s/def :guitarist/died integer?)
+
+(s/def :guitarist/guitarist (s/keys :req-un [:guitarist/name :guitarist/born]
+                                    :opt-un [:guitarist/died]))
+
 (defn get-guitarist [guitarist-id]
   (get
     {:jimi  {:name "Jimi Hendrix" :born 1942 :died 1970}
@@ -20,15 +27,9 @@
 (defn get-current-year []
   2019)
 
-(s/def :guitarist/name string?)
-(s/def :guitarist/born integer?)
-(s/def :guitarist/died integer?)
-
-(s/def :guitarist/guitarist (s/keys :req-un [:guitarist/name :guitarist/born]
-                                    :opt-un [:guitarist/died]))
-
 (def get-guitarist-step
-  (pipeline/action :get-guitarist #'get-guitarist [[:guitarist-id]] :guitarist))
+  (pipeline/action :get-guitarist #'get-guitarist
+                   [[:guitarist-id]] :guitarist :guitarist/guitarist))
 
 (def get-current-year-step
    (pipeline/action :get-current-year #'get-current-year [] :current-year int?))
@@ -41,6 +42,9 @@
   [get-guitarist-step
    get-current-year-step
    calculate-age-step])
+
+(with-redefs [get-current-year (constantly nil)]
+  (pipeline/run-pipeline example-pipeline {:guitarist-id :jimi}))
 
 (s/explain :pipeline/pipeline example-pipeline)
 

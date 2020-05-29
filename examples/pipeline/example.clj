@@ -4,12 +4,20 @@
     [pipeline.core :as pipeline]
     [pipeline.print]))
 
+;;
+;; Guitarist spec
+;;
+
 (s/def :guitarist/name string?)
 (s/def :guitarist/born integer?)
 (s/def :guitarist/died integer?)
 
 (s/def :guitarist/guitarist (s/keys :req-un [:guitarist/name :guitarist/born]
                                     :opt-un [:guitarist/died]))
+
+;;
+;; The functions
+;;
 
 (defn get-guitarist [guitarist-id]
   (get
@@ -26,6 +34,10 @@
 (defn get-current-year []
   2019)
 
+;;
+;; The steps
+;;
+
 (def get-guitarist-step
   {:pipeline.step/name :get-guitarist
    :pipeline.step/type :action
@@ -34,77 +46,57 @@
                             :steve {:name "Steve Vai"    :born 1960}}
    :pipeline.step/input-paths [[:guitarist-id]]
    :pipeline.step/output-path :guitarist
-   :pipeline.step/output-schema Guitarist})
+   :pipeline.step/output-schema :guitarist/guitarist})
 
 (def get-guitarist-step
-  {:pipeline.step/name :get-guitarist
-   :pipeline.step/type :action
-   :pipeline.step/function identity
-   :pipeline.step/input-paths [[:guitarists]]
-   :pipeline.step/output-path :all-guitarists})
- ;:pipeline.step/output-schema Guitarist})
+  (pipeline/action :get-guitarist #'get-guitarist
+                   [[:guitarist-id]] :guitarist :guitarist/guitarist))
 
 (def get-current-year-step
-  {:pipeline.step/name :get-current-year
-   :pipeline.step/type :action
-   :pipeline.step/function #'get-current-year
-   :pipeline.step/input-paths []
-   :pipeline.step/output-path :current-year
-   :pipeline.step/output-schema int?})
+   (pipeline/action :get-current-year #'get-current-year [] :current-year int?))
 
 (def calculate-age-step
-  {:pipeline.step/name :calculate-age
-   :pipeline.step/type :transformation
-   :pipeline.step/function #'calculate-age
-   :pipeline.step/input-paths [[:guitarist :born] [:guitarist :died] [:current-year]]
-   :pipeline.step/output-path :guitarist/age
-   :pipeline.step/output-schema int?})
+   (pipeline/transformation :calculate-age #'calculate-age
+                            [[:guitarist :born] [:guitarist :died] [:current-year]]
+                            :guitarist/age int?))
 
-(def pipeline
-  [{:jimi  {:name "Jimi Hendrix" :born 1942 :died 1970}
-    :duane {:name "Duane Allman" :born 1946 :died 1971}
-    :steve {:name "Steve Vai"    :born 1960}}
-   get-current-year-step
-   calculate-age-step])
-
+;;
+;; The pipeline
+;;
 
 (def pipeline
   [get-guitarist-step
    get-current-year-step
    calculate-age-step])
 
-(def data
-  {:guitarists
-    {:jimi  {:name "Jimi Hendrix" :born 1942 :died 1970}
-     :duane {:name "Duane Allman" :born 1946 :died 1971}
-     :steve {:name "Steve Vai"    :born 1960}}})
-
-(->>
-  (pipeline/run-pipeline pipeline data)
-  (pipeline/get-output))
-
-(pipeline/run-pipeline pipeline {:guitarist-id :steve})
-(s/explain :pipeline/pipeline pipeline)
-
-
+;;
 ;; Example of a successful pipeline
-(pipeline/run-pipeline pipeline {:guitarist-id :steve})
-(pipeline/success?)
-(pipeline/get-output)
-(pipeline.print/print-result)
+;;
 
-(pipeline.print/print-result)
-(pipeline/last-result)
+(def pipe-res (pipeline/run-pipeline pipeline {:guitarist-id :steve}))
+(pipeline/success? pipe-res)
+(pipeline/get-output pipe-res)
+(pipeline.print/print-result pipe-res)
 
-;; Example of a failing pipeline
-(pipeline/run-pipeline pipeline {:guitarist-id -1})
-(pipeline.print/print-result)
-(pipeline/last-result)
+;;
+;; Example of a pipeline that fails due to invalid output from a step
+;;
+
+(def pipe-res (pipeline/run-pipeline pipeline {:guitarist-id -1}))
+(pipeline/success? pipe-res)
+(pipeline.print/print-result pipe-res)
+(pipeline/get-error pipe-res)
 
 ;; Example of an exception throwing pipeline
-(with-redefs [get-current-year #(throw (ex-info "Problem!" {:some :problem}))]
+(def pipe-res (with-redefs [get-current-year #(throw (ex-info "Problem!" {:some :problem}))]
+                 (pipeline/run-pipeline pipeline {:guitarist-id :steve})))
+(pipeline/success? pipe-res)
+(pipeline/failure? pipe-res)
+(pipeline/exception? pipe-res)
+(pipeline.print/print-result pipe-res)
+(pipeline/get-exception pipe-res)
 
-  (pipeline/run-pipeline pipeline {:guitarist-id :steve})
-  (pipeline.print/print-result)
-  (pipeline/last-result))
+(comment
+  (clojure.repl/pst (pipeline/get-exception pipe-res))
+  (clojure.stacktrace/print-stack-trace (pipeline/get-exception pipe-res)))
 

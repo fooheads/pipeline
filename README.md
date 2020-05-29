@@ -10,6 +10,7 @@ Description will come later. See tests for examples.
 * [x] Move examples from test to examples
 * [x] Replace malli with spec
 * [x] Add action and transformation construction functions
+* [x] Restructure internal context
 * [ ] Add missing accessors
 * [ ] add pipeline binding and get-binding accessor
 * [ ] add step binding and get-step-binding and a second optional argument to get-binding
@@ -24,7 +25,9 @@ Description will come later. See tests for examples.
 * [ ] store only changed "keys" in trace
 * [ ] validate dependencies (all should resolve)
 * [ ] fork/join, paralellisation when executing
-
+* [ ] validate that step names are unique
+* [ ] decide if it's ok or not to overwrite keys
+* [ ] validate that if a key is overwritten then it's in the same path if there are forks. No race conditions allowed.
 
 
 
