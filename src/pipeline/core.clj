@@ -34,8 +34,10 @@
           :opt [:pipeline.step/output-path
                 :pipeline.step/output-schema]))
 
+(s/def :pipeline/steps (s/coll-of :pipeline/step))
+
 (s/def :pipeline/pipeline
-  (s/coll-of :pipeline/step))
+  (s/keys :req [:pipeline/steps]))
 
 (defn valid? [pipeline]
   (s/valid? :pipeline/pipeline pipeline))
@@ -77,6 +79,9 @@
 ;;
 ;;
 ;;
+
+(defn- steps [pipeline]
+  (:pipeline/steps pipeline))
 
 (defn run-step [context step options]
   "Runs a single step. This is called from run-pipeline and normally not used directly,
@@ -147,14 +152,16 @@
   ([pipeline args options]
    (assert (valid? pipeline) "Not a valid pipeline!")
 
-   (let [context {:pipeline/steps pipeline :pipeline/step-executions [] :pipeline/state args}
-         result (reduce (fn [context step] (run-step context step options)) context pipeline)]
+   (let [context {:pipeline/pipeline pipeline :pipeline/step-executions [] :pipeline/state args}
+         result (reduce (fn [context step] (run-step context step options)) context (steps pipeline))]
      (def *pipeline result)
      result)))
 
 ;;;
 ;;; Helper functions
 ;;;
+
+
 
 (defn last-run
   "Returns the stored result from the last call to run-pipeline"
@@ -232,6 +239,9 @@
     :pipeline.step/input-paths inputs
     :pipeline.step/output-path output
     :pipeline.step/output-schema output-spec}))
+
+(defn pipeline [steps]
+  {:pipeline/steps steps})
 
 (comment
   (ns pipeline.core)

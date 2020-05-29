@@ -65,9 +65,9 @@
 ;;
 
 (def pipeline
-  [get-guitarist-step
-   get-current-year-step
-   calculate-age-step])
+  (pipeline/pipeline [get-guitarist-step
+                      get-current-year-step
+                      calculate-age-step]))
 
 ;;
 ;; Example of a successful pipeline

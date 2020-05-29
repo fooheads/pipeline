@@ -39,14 +39,12 @@
                             [[:guitarist :born] [:guitarist :died] [:current-year]]
                             :guitarist/age int?))
 (def example-pipeline
-  [get-guitarist-step
-   get-current-year-step
-   calculate-age-step])
+  (pipeline/pipeline [get-guitarist-step
+                      get-current-year-step
+                      calculate-age-step]))
 
 (with-redefs [get-current-year (constantly nil)]
   (pipeline/run-pipeline example-pipeline {:guitarist-id :jimi}))
-
-(s/explain :pipeline/pipeline example-pipeline)
 
 (deftest step-schema
   (is (true? (s/valid? :pipeline/step get-guitarist-step))))
