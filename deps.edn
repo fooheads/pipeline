@@ -5,7 +5,7 @@
  {
   :test
   {;:extra-paths ["test" "examples"]
-   :extra-deps {lambdaisland/kaocha {:mvn/version "0.0-573"}
+   :extra-deps {lambdaisland/kaocha {:mvn/version "1.0.632"}
                 lambdaisland/kaocha-junit-xml {:mvn/version "0.0-70"}}
 
    :main-opts  ["-m" "kaocha.runner"
