@@ -5,7 +5,11 @@
     [clojure.spec.alpha :as s]
     [clojure.string :as str]
     [clojure.pprint :refer [pprint print-table]]))
-    ;[malli.core :as m]))
+
+(defn resolve-spec [var-or-any]
+  (if (var? var-or-any)
+    (var-get var-or-any)
+    var-or-any))
 
 ;;
 ;; Ideas
@@ -35,9 +39,10 @@
                 :pipeline.step/output-schema]))
 
 (s/def :pipeline/steps (s/coll-of :pipeline/step))
+(s/def :pipeline/bindings (s/map-of keyword? fn?))
 
 (s/def :pipeline/pipeline
-  (s/keys :req [:pipeline/steps]))
+  (s/keys :req [:pipeline/steps :pipeline/bindings]))
 
 (defn valid? [pipeline]
   (s/valid? :pipeline/pipeline pipeline))
@@ -108,18 +113,19 @@
               context (update context :pipeline/step-executions conj (step-execution-success step args result time-spent))]
 
           (if output-schema
-            (if (s/valid? output-schema result)
-              context
-              (let [reason :invalid-output
-                    value result
-                    message (s/explain output-schema value)]
-                (->
-                  context
-                  (update :pipeline/step-executions conj (step-execution-error step args reason value message time-spent))
-                  ;; HERE - add error to step-executions
-                  (assoc :pipeline/error (merge step {:pipeline.error/reason reason
-                                                      :pipeline.error/value value
-                                                      :pipeline.error/message message})))))
+            (let [resolved-output-schema (resolve-spec output-schema)]
+              (if (s/valid? resolved-output-schema result)
+                context
+                (let [reason :invalid-output
+                      value result
+                      message (s/explain resolved-output-schema value)]
+                  (->
+                    context
+                    (update :pipeline/step-executions conj (step-execution-error step args reason value message time-spent))
+                    ;; HERE - add error to step-executions
+                    (assoc :pipeline/error (merge step {:pipeline.error/reason reason
+                                                        :pipeline.error/value value
+                                                        :pipeline.error/message message}))))))
             context))
         (catch Exception e
           (let [reason :exception
@@ -240,8 +246,12 @@
     :pipeline.step/output-path output
     :pipeline.step/output-schema output-spec}))
 
-(defn pipeline [steps]
-  {:pipeline/steps steps})
+(defn pipeline
+  ([steps]
+   (pipeline steps {}))
+  ([steps bindings]
+   {:pipeline/steps steps
+    :pipeline/bindings bindings}))
 
 (comment
   (ns pipeline.core)
