@@ -39,7 +39,7 @@
                 :pipeline.step/output-schema]))
 
 (s/def :pipeline/steps (s/coll-of :pipeline/step))
-(s/def :pipeline/bindings (s/map-of keyword? fn?))
+(s/def :pipeline/bindings (s/map-of keyword? any?))
 
 (s/def :pipeline/pipeline
   (s/keys :req [:pipeline/steps :pipeline/bindings]))
