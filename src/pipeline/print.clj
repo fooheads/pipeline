@@ -55,4 +55,16 @@
          (println (str "(" f " " (str/join " " (map pr-str args)) ")"))
          (println (str "(" f ")")))))))
 
+(defn print-pipeline [pipeline]
+  (print-table (:pipeline/steps pipeline)))
+
+(defn step-run->str [step-run]
+  (->>
+    (select-keys step-run [:pipeline.step/name])))
+    ;(into {})))
+
+(defn print-run [pipeline-run]
+  (let [step-runs (map step-run->str (:pipeline/step-executions pipeline-run))]
+    step-runs
+    (print-table step-runs)))
 
