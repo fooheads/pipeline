@@ -1,6 +1,6 @@
 {:deps
- {philoskim/debux-stubs              {:mvn/version "0.5.6"
-                                      :sha "e2ff736ff923c676de655b853180be2503715d88"}}
+ {}
+
  :aliases
  {
   :test
@@ -20,6 +20,8 @@
                 clj-http               {:mvn/version "3.10.1"}
                 clj-http-fake          {:mvn/version "1.0.3"}
                 com.h2database/h2      {:mvn/version "1.4.200"}
+                datawalk               {:mvn/version "0.1.12"}
+                philoskim/debux        {:mvn/version "0.6.8"}
                 seancorfield/next.jdbc {:mvn/version "1.0.7"}}}}}
 
 
