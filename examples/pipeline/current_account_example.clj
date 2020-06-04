@@ -1,11 +1,12 @@
 (ns pipeline.current-account-example
   (:require
     [clj-http.client :as http]
+    [clojure.spec.alpha :as s]
     [clojure.string :as str]
     [next.jdbc :as jdbc]
     [next.jdbc.result-set :as result-set]
     [pipeline.core :as pipeline]
-    [pipeline.print :as pipeprint]))
+    [pipeline.print :refer :all]))
 ;;
 ;; Balance in EUR
 ;; Get user balance (SEK)
@@ -40,11 +41,11 @@
                       name varchar)")
 
   (db-execute! ds "create table balance (
-                       id int auto_increment primary key,
-                       currency varchar(3) not null,
-                       balance double not null,
-                       user_id int not null,
-                       foreign key (user_id) references user(id))")
+                  id int auto_increment primary key,
+                  currency varchar(3) not null,
+                  balance double not null,
+                  user_id int not null,
+                  foreign key (user_id) references user(id))")
 
   (jdbc/execute! ds ["insert into user(name) values('John Doe')"])
   (jdbc/execute! ds ["insert into user(name) values('Jane Doe')"])
@@ -56,6 +57,8 @@
 ;;
 ;; These are the functions used in the pipeline
 ;;
+
+(use 'debux.core)
 
 (defn db-execute!
   "A thin wrapper around jdbc/execute! that is callable with sql statement separated from the args"
@@ -87,11 +90,11 @@
 ;; Define the steps and the pipeline
 ;;
 
-
 (def example-pipeline
-  (pipeline/pipeline
+  (pipeline/make-pipeline
     [(pipeline/action
-       :get-balances-for-user #'db-execute! [[:data-source] [:sql-query] [:user-id]] :balances)
+       :get-balances-for-user #'db-execute!
+       [[:data-source] [:sql-query] [:user-id]] :balances)
 
      (pipeline/transformation
        :extract-currencies #'extract-currencies [[:balances]] :currencies)
@@ -104,6 +107,7 @@
      (pipeline/transformation
        :calculate-value #'calculate-value [[:balances] [:exchange-rates-response :body :rates]] :value)]))
 
+(pipeline/step-path example-pipeline (get-in example-pipeline [:pipeline/steps 2]))
 
 (comment
   (def db {:dbtype "h2:mem" :dbname "example"})
@@ -111,20 +115,46 @@
 
   (populate-database ds)
 
-  (def execution (pipeline/run-pipeline example-pipeline {:date-today "2020-06-01"
-                                                          :data-source ds
-                                                          :sql-query "select * from balance where user_id = ?"
-                                                          :user-id 2
-                                                          :get-exchange-rate-url "https://api.exchangeratesapi.io"
-                                                          :base-currency "EUR"}))
-  (prn "success?" (pipeline/success? execution))
-  (prn "result" (pipeline/get-output execution))
-  (pipeline/get-output execution)
-  (pipeprint/print-result execution)
+  (pipeline/run-pipeline example-pipeline {:date-today "1900-06-01"
+                                           :data-source ds
+                                           :sql-query "select * from balance where user_id = ?"
+                                           :user-id 2
+                                           :get-exchange-rate-url "https://api.exchangeratesapi.io"
+                                           :base-currency "EUR"})
 
-  (pipeprint/print-pipeline example-pipeline)
-  (pipeprint/print-run execution)
+  (print-run)
+
+  (require '[datawalk.core :as dc])
+  (dc/repl (pipeline/last-run))
+
+  (pipeline/next-step example-pipeline)
+  (pipeline/next-step (pipeline/last-run))
+  (s/valid? :pipeline/pipeline example-pipeline)
+  (s/explain :pipeline/pipeline example-pipeline)
+  (s/conform :pipeline/pipeline example-pipeline)
 
 
-  (pipeline/get-output execution))
+  (s/valid? :pipeline/pipeline-definition example-pipeline)
+  (s/explain :pipeline/pipeline-definition example-pipeline)
+
+  (s/valid? :pipeline/pipeline-run (pipeline/last-run))
+  (s/explain :pipeline/pipeline-run (pipeline/last-run))
+
+  (pipeline/last-run)
+  (pipeline/result)
+
+  (pipeline/failed-step)
+  (pipeline/failed-call)
+  (pipeline/step-runs)
+  (pipeline/step-runs')
+
+
+  (print-failed-call)
+
+  (print-pipeline)
+  (print-run)
+
+  (into [] (-> (pipeline/last-run) (pipeline/step-runs) first :pipeline.step-execution/args))
+  (def step-run (-> (pipeline/last-run) (pipeline/step-runs) first))
+  (augment-step-run step-run))
 

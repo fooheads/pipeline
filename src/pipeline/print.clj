@@ -34,10 +34,10 @@
 (defn print-result
   "Prints the result of the last or given in a human friendly way."
   ([] (print-result (pipeline/last-run)))
-  ([result]
-   (if (pipeline/success? result)
-     (println (format "Success!\n\n%s" (pr-str (pipeline/get-output result))))
-     (print-error (pipeline/get-error result)))))
+  ([run]
+   (if (pipeline/success? run)
+     (println (format "Success!\n\n%s" (pr-str (pipeline/result run))))
+     (print-error (pipeline/error run)))))
 
 (defn print-failed-call
   "Prints the call that failed as close as possible to what a conctete call
@@ -55,16 +55,39 @@
          (println (str "(" f " " (str/join " " (map pr-str args)) ")"))
          (println (str "(" f ")")))))))
 
-(defn print-pipeline [pipeline]
-  (print-table (:pipeline/steps pipeline)))
+(defn print-pipeline
+  ([] (print-pipeline (pipeline/last-run)))
+  ([pipeline-or-run]
+   (print-table (:pipeline/steps (or (pipeline/pipeline pipeline-or-run) pipeline-or-run)))))
 
-(defn step-run->str [step-run]
-  (->>
-    (select-keys step-run [:pipeline.step/name])))
-    ;(into {})))
+(defn ->short-str [len v]
+  (let [s (str v)]
+    (if (< (count s) len)
+      s
+      (format "%s..." (subs s 0 len)))))
 
-(defn print-run [pipeline-run]
-  (let [step-runs (map step-run->str (:pipeline/step-executions pipeline-run))]
-    step-runs
-    (print-table step-runs)))
+(defn map-vals
+  "Apply f to all values in m"
+  [f m]
+  (reduce-kv
+    (fn [m k v]
+      (assoc m k (f v))) {} m))
+
+(defn map-keys
+  "Apply f to all keys in m"
+  [f m]
+  (reduce-kv
+    (fn [m k v]
+      (assoc m (f k) v)) {} m))
+
+(defn print-run
+  ([] (print-run (pipeline/last-run)))
+  ([run]
+   (let [ks [:seq-id :state :name :function :args :result]]
+     (->>
+       run
+       :pipeline/steps
+       (map #(map-vals (partial ->short-str 35) %))
+       (map #(map-keys (comp keyword name) %))
+       (print-table ks)))))
 
