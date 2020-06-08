@@ -24,14 +24,15 @@
 ;;; Schemas
 ;;;
 
-(s/def :pipeline/bindings (s/map-of keyword? any?))
+(s/def ::bindings (s/map-of keyword? any?))
+(s/def :pipeline/bindings ::bindings)
 
 ;; Things that exist before a step is executed.
 
 (s/def ::state #{:not-started :successful :failed})
 
+(s/def :pipeline.step/bindings ::bindings)
 (s/def :pipeline.step/state ::state)
-(s/def :pipeline/state ::state)
 
 (s/def :pipeline.step/seq-id integer?)
 
@@ -58,21 +59,11 @@
 (s/def :pipeline.step/failure-value any?)
 (s/def :pipeline.step/failure-message any?)
 
-; (s/def :pipeline.step.failure/reason #{:invalid-output :exception})
-; (s/def :pipeline.step.failure/value any?)
-; (s/def :pipeline.step.failure/message any?)
-;
-; (s/def :pipeline.step/failure
-;   (s/keys :req-un [:pipeline.step.failure/reason
-;                    :pipeline.step.failure/value
-;                    :pipeline.step.failure/message]))
-;
-
-
 (defmulti pipeline-step :pipeline.step/state)
 
 (defmethod pipeline-step :not-started [_]
-  (s/keys :req [:pipeline.step/state
+  (s/keys :req [:pipeline.step/bindings
+                :pipeline.step/state
                 :pipeline.step/seq-id
                 :pipeline.step/name
                 :pipeline.step/type
@@ -82,7 +73,8 @@
                 :pipeline.step/output-schema]))
 
 (defmethod pipeline-step :successful [_]
-  (s/keys :req [:pipeline.step/state
+  (s/keys :req [:pipeline.step/bindings
+                :pipeline.step/state
                 :pipeline.step/seq-id
                 :pipeline.step/name
                 :pipeline.step/type
@@ -94,7 +86,8 @@
                 :pipeline.step/time-spent]))
 
 (defmethod pipeline-step :failed [_]
-  (s/keys :req [:pipeline.step/state
+  (s/keys :req [:pipeline.step/bindings
+                :pipeline.step/state
                 :pipeline.step/seq-id
                 :pipeline.step/name
                 :pipeline.step/type
@@ -106,8 +99,10 @@
                 :pipeline.step/failure-value
                 :pipeline.step/failure-message]))
 
+(s/def :pipeline/state ::state)
 (s/def :pipeline/step (s/multi-spec pipeline-step :pipeline.step/state))
 (s/def :pipeline/steps (s/coll-of :pipeline/step))
+(s/def :pipeline/bindings ::bindings)
 
 (s/def :pipeline/pipeline
   (s/keys :req [:pipeline/steps :pipeline/bindings]))
@@ -153,6 +148,18 @@
 (declare not-started?)
 (declare successful?)
 (declare failed?)
+
+(defn bindings
+  "Returns the bindings of a pipeline or a step."
+  [pipeline-or-step]
+  {:post [(s/valid? ::bindings %)]}
+
+  (cond
+    (step? pipeline-or-step)
+    (:pipeline.step/bindings pipeline-or-step)
+
+    (pipeline? pipeline-or-step)
+    (:pipeline/bindings pipeline-or-step)))
 
 (defn state
   "Returns the state of a pipeline or a step."
@@ -330,13 +337,15 @@
 
    ;; TODO: validate args
 
-   (loop [state (merge (:binding pipeline) args)
+   (loop [state (merge (bindings pipeline) args)
           pipeline pipeline]
      (if (pipeline-finished? pipeline)
        (do
          (def *pipeline pipeline)
          pipeline)
        (let [step (next-step pipeline)
+             bindings (bindings step)
+             state (merge state bindings)
              f (:pipeline.step/function step)
              args (args-for-step step state)
              output-schema (:pipeline.step/output-schema step)
@@ -353,11 +362,14 @@
 
 (defn action
   ([step-name f inputs]
-   (action step-name f inputs nil nil))
+   (action step-name f inputs nil nil {}))
   ([step-name f inputs output]
-   (action step-name f inputs output nil))
+   (action step-name f inputs output nil {}))
   ([step-name f inputs output output-spec]
-   {:pipeline.step/name step-name
+   (action step-name f inputs output output-spec {}))
+  ([step-name f inputs output output-spec bindings]
+   {:pipeline.step/bindings bindings
+    :pipeline.step/name step-name
     :pipeline.step/type :action
     :pipeline.step/function f
     :pipeline.step/input-paths inputs
@@ -366,9 +378,12 @@
 
 (defn transformation
   ([step-name f inputs output]
-   (action step-name f inputs output nil))
+   (action step-name f inputs output nil {}))
   ([step-name f inputs output output-spec]
-   {:pipeline.step/name step-name
+   (action step-name f inputs output output-spec {}))
+  ([step-name f inputs output output-spec bindings]
+   {:pipeline.step/bindings bindings
+    :pipeline.step/name step-name
     :pipeline.step/type :transformation
     :pipeline.step/function f
     :pipeline.step/input-paths inputs
@@ -379,8 +394,7 @@
   ([steps]
    (make-pipeline steps {}))
   ([steps bindings]
-   {;; :pre [(s/valid? :pipeline/step-definitions steps)]
-    :post [(s/valid? :pipeline/pipeline %)]}
+   {:post [(s/valid? :pipeline/pipeline %)]}
 
    {:pipeline/steps (->>
                       steps

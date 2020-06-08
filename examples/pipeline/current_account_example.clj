@@ -76,7 +76,9 @@
   (pipeline/make-pipeline
     [(pipeline/action
        :get-balances-for-user #'db-execute!
-       [[:data-source] [:sql-query] [:user-id]] :balances)
+       [[:data-source] [:sql-query] [:user-id]]
+
+       :balances)
 
      (pipeline/transformation
        :extract-currencies #'extract-currencies [[:balances]] :currencies)
@@ -87,7 +89,8 @@
        :exchange-rates-response)
 
      (pipeline/transformation
-       :calculate-value #'calculate-value [[:balances] [:exchange-rates-response :body :rates]] :value)]))
+       :calculate-value #'calculate-value [[:balances] [:exchange-rates-response :body :rates]] :value)]
+    {:get-exchange-rate-url "https://api.exchangeratesapi.io"}))
 
 (pipeline/step-path example-pipeline (get-in example-pipeline [:pipeline/steps 2]))
 
@@ -101,7 +104,7 @@
                                            :data-source ds
                                            :sql-query "select * from balance where user_id = ?"
                                            :user-id 2
-                                           :get-exchange-rate-url "https://api.exchangeratesapi.io"
+                                           ;:get-exchange-rate-url "https://api.exchangeratesapi.io"
                                            :base-currency "EUR"})
 
   (-> (pipeline/last-run) :pipeline/steps (nth 2) pipeline/state)

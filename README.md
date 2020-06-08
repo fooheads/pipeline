@@ -16,8 +16,8 @@ Description will come later. See tests for examples.
 * [x] allow both simple and qualified keywords as input paths
 * [x] allow both simple and qualified keywords as output path
 * [ ] Add missing accessors
-* [ ] add pipeline binding and get-binding accessor
-* [ ] add step binding and get-step-binding and a second optional argument to get-binding
+* [x] add pipeline binding and get-binding accessor
+* [x] add step binding
 * [ ] param "spec" (required keys and preds)
 * [ ] print/return pipeline (static structure)
 * [ ] print/return pipeline run (results of steps)

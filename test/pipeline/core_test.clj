@@ -43,28 +43,37 @@
     (map (partial calculate-single-value exchange-rates))
     (reduce +)))
 
-(def example-pipeline
-  (pipeline/make-pipeline
 
-    ;; with simple keywords on input paths
-    [(pipeline/action
-       :get-balances-for-user #'db-execute!
-       [:data-source :sql-query :user-id] :balances)
+(def step-get-balances-for-user  ;; with simple keywords on input paths
+  (pipeline/action :get-balances-for-user #'db-execute! [:data-source :sql-query :user-id] :balances))
 
-     ;; with path as output path
-     (pipeline/transformation
-       :extract-currencies #'extract-currencies [[:balances]]
-       [:currencies :value])
+(def step-extract-currencies ;; with path as output path
+  (pipeline/transformation :extract-currencies #'extract-currencies [[:balances]] [:currencies :value]))
 
-     ;; with all paths as inputs paths
-     (pipeline/action
-       :get-exchange-rates #'get-exchange-rates!
-       [[:get-exchange-rate-url] [:date-today] [:base-currency] [:currencies :value]]
-       :exchange-rates-response)
+(def step-get-exchange-rates ;; with all paths as inputs paths
+  (pipeline/action :get-exchange-rates #'get-exchange-rates!
+                   [[:get-exchange-rate-url] [:date-today] [:base-currency] [:currencies :value]]
+                   :exchange-rates-response))
 
-     ;; with mixed keywords and paths as input paths
-     (pipeline/transformation
-       :calculate-value #'calculate-value [[:balances] [:exchange-rates-response :body :rates]] :value)]))
+(def step-calculate-value ;; with mixed keywords and paths as input paths
+  (pipeline/transformation :calculate-value #'calculate-value
+                           [:balances [:exchange-rates-response :body :rates]] :value))
+
+(def steps
+  [step-get-balances-for-user
+   step-extract-currencies
+   step-get-exchange-rates
+   step-calculate-value])
+
+(def example-pipeline (pipeline/make-pipeline steps))
+
+(def args
+  {:date-today "2020-06-01"
+   :data-source "fake data source"
+   :sql-query "select * from balance where user_id = ?"
+   :user-id 2
+   :get-exchange-rate-url "https://api.exchangeratesapi.io"
+   :base-currency "EUR"})
 
 (deftest pipeline?-test
   (is (true? (pipeline/pipeline? example-pipeline)))
@@ -84,15 +93,7 @@
     (is (true? (every? pipeline/not-started? (pipeline/steps run))))))
 
 (deftest successful-pipeline
-  (let [run (pipeline/run-pipeline
-              example-pipeline
-              {:date-today "2020-06-01"
-               :data-source "fake data source"
-               :sql-query "select * from balance where user_id = ?"
-               :user-id 2
-               :get-exchange-rate-url "https://api.exchangeratesapi.io"
-               :base-currency "EUR"})]
-
+  (let [run (pipeline/run-pipeline example-pipeline args)]
     (is (= :successful (pipeline/state run)))
     (is (false? (pipeline/not-started? run)))
     (is (true? (pipeline/successful? run)))
@@ -108,5 +109,41 @@
       (is (true? (pipeline/failed? run)))
       (is (= [:get-balances-for-user]
              (map pipeline/step-name (pipeline/failed-steps run)))))))
+
+(deftest pipeline-bindings-test
+  (with-redefs [get-exchange-rates! (fn [base-url date base symbols]
+                                      (if-not (= base-url "http://foo.com/bar")
+                                        (throw (ex-info "Pipeline bindings not working!" {:base-url base-url}))
+                                        {:body {:base "EUR"
+                                                :date "2020-06-01"
+                                                :rates {:SEK 10.4635 :USD 1.1116}}}))]
+
+    (let [pl (pipeline/make-pipeline steps {:get-exchange-rate-url "http://foo.com/bar"})]
+      (let [run (pipeline/run-pipeline pl (dissoc args :get-exchange-rate-url))]
+        (is (= :successful (pipeline/state run)))))))
+
+(deftest step-bindings-test
+  (with-redefs [get-exchange-rates! (fn [base-url date base symbols]
+                                      (if-not (= base-url "http://foo.com/step")
+                                        (throw (ex-info "Pipeline bindings not working!" {:base-url base-url}))
+                                        {:body {:base "EUR"
+                                                :date "2020-06-01"
+                                                :rates {:SEK 10.4635 :USD 1.1116}}}))]
+
+    (let [step-get-exchange-rates-with-binding
+          (pipeline/action :get-exchange-rates #'get-exchange-rates!
+                           [[:get-exchange-rate-url] [:date-today] [:base-currency] [:currencies :value]]
+                           :exchange-rates-response
+                           nil
+                           {:get-exchange-rate-url "http://foo.com/step"})
+
+          steps [step-get-balances-for-user
+                 step-extract-currencies
+                 step-get-exchange-rates-with-binding
+                 step-calculate-value]
+
+          pl (pipeline/make-pipeline steps {})]
+      (let [run (pipeline/run-pipeline pl (dissoc args :get-exchange-rate-url))]
+        (is (= :successful (pipeline/state run)))))))
 
 
