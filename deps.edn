@@ -14,7 +14,7 @@
 
   :examples
   {:extra-paths ["examples"]
-   :extra-deps {
+   :extra-deps {cheshire               {:mvn/version "5.10.0"}
                 clj-http               {:mvn/version "3.10.1"}
                 com.h2database/h2      {:mvn/version "1.4.200"}
                 datawalk               {:mvn/version "0.1.12"}
