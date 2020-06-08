@@ -51,13 +51,15 @@
        :get-balances-for-user #'db-execute!
        [:data-source :sql-query :user-id] :balances)
 
+     ;; with path as output path
      (pipeline/transformation
-       :extract-currencies #'extract-currencies [[:balances]] :currencies)
+       :extract-currencies #'extract-currencies [[:balances]]
+       [:currencies :value])
 
      ;; with all paths as inputs paths
      (pipeline/action
        :get-exchange-rates #'get-exchange-rates!
-       [[:get-exchange-rate-url] [:date-today] [:base-currency] [:currencies]]
+       [[:get-exchange-rate-url] [:date-today] [:base-currency] [:currencies :value]]
        :exchange-rates-response)
 
      ;; with mixed keywords and paths as input paths

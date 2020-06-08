@@ -39,10 +39,11 @@
 (s/def :pipeline.step/type #{:action :transformation :validation})
 (s/def :pipeline.step/function ifn?)
 
-(s/def :pipeline.step/input-path (s/or :key keyword? :path (s/coll-of keyword?)))
+(s/def ::path (s/or :key keyword? :path (s/coll-of keyword?)))
+(s/def :pipeline.step/input-path ::path)
 (s/def :pipeline.step/input-paths (s/coll-of :pipeline.step/input-path))
 
-(s/def :pipeline.step/output-path keyword?) ;;
+(s/def :pipeline.step/output-path ::path)
 (s/def :pipeline.step/output-schema any?)   ;; spec
 
 ;; Things that are added when a step can be / is executed.
@@ -401,6 +402,7 @@
    :params {:data-source #'data-source?
             :spm-url #'url?}
    :repl {:datasource "@repl/ds"}})
+
 
 
 
