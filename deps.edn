@@ -2,9 +2,8 @@
  {}
 
  :aliases
- {
-  :test
-  {;:extra-paths ["test" "examples"]
+ {:test
+  {:extra-paths ["test"]
    :extra-deps {lambdaisland/kaocha {:mvn/version "1.0.632"}
                 lambdaisland/kaocha-junit-xml {:mvn/version "0.0-70"}}
 
@@ -13,15 +12,12 @@
                 "--plugin" "junit-xml"
                 "--junit-xml-file" "target/test-results/kaocha/unit-test-result.xml"]}
 
-
   :examples
-  {:extra-paths ["examples" "test"]
-   :extra-deps {cheshire               {:mvn/version "5.10.0"}
+  {:extra-paths ["examples"]
+   :extra-deps {
                 clj-http               {:mvn/version "3.10.1"}
-                clj-http-fake          {:mvn/version "1.0.3"}
                 com.h2database/h2      {:mvn/version "1.4.200"}
                 datawalk               {:mvn/version "0.1.12"}
-                philoskim/debux        {:mvn/version "0.6.8"}
                 seancorfield/next.jdbc {:mvn/version "1.0.7"}}}}}
 
 

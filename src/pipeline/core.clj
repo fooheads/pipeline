@@ -28,7 +28,11 @@
 
 ;; Things that exist before a step is executed.
 
-(s/def :pipeline.step/state #{:not-run :success :failure})
+(s/def ::state #{:not-started :successful :failed})
+
+(s/def :pipeline.step/state ::state)
+(s/def :pipeline/state ::state)
+
 (s/def :pipeline.step/seq-id integer?)
 
 (s/def :pipeline.step/name keyword?)
@@ -38,8 +42,8 @@
 (s/def :pipeline.step/input-path (s/or :key keyword? :path (s/coll-of keyword?)))
 (s/def :pipeline.step/input-paths (s/coll-of :pipeline.step/input-path))
 
-(s/def :pipeline.step/output-path keyword?)
-(s/def :pipeline.step/output-schema any?)
+(s/def :pipeline.step/output-path keyword?) ;;
+(s/def :pipeline.step/output-schema any?)   ;; spec
 
 ;; Things that are added when a step can be / is executed.
 (s/def :pipeline.step/args (s/coll-of any?))
@@ -66,7 +70,7 @@
 
 (defmulti pipeline-step :pipeline.step/state)
 
-(defmethod pipeline-step :not-run [_]
+(defmethod pipeline-step :not-started [_]
   (s/keys :req [:pipeline.step/state
                 :pipeline.step/seq-id
                 :pipeline.step/name
@@ -76,7 +80,7 @@
                 :pipeline.step/output-path
                 :pipeline.step/output-schema]))
 
-(defmethod pipeline-step :success [_]
+(defmethod pipeline-step :successful [_]
   (s/keys :req [:pipeline.step/state
                 :pipeline.step/seq-id
                 :pipeline.step/name
@@ -88,7 +92,7 @@
                 :pipeline.step/result
                 :pipeline.step/time-spent]))
 
-(defmethod pipeline-step :failure [_]
+(defmethod pipeline-step :failed [_]
   (s/keys :req [:pipeline.step/state
                 :pipeline.step/seq-id
                 :pipeline.step/name
@@ -107,41 +111,6 @@
 (s/def :pipeline/pipeline
   (s/keys :req [:pipeline/steps :pipeline/bindings]))
 
-;;;
-;;; private
-;;;
-
-(defn- step-run-success [step args result time-spent]
-  (merge
-    (select-keys step [:pipeline.step/name])
-    {:pipeline.step-run/args args
-     :pipeline.step-run/result result
-     :pipeline.step-run/time-spent time-spent}))
-
-(defn- step-run-error [step args reason value message time-spent]
-  (merge
-    (select-keys step [:pipeline.step/name])
-    {:pipeline.step-run/args args
-     :pipeline.step-run/time-spent time-spent}
-    {:pipeline.error/reason reason
-     :pipeline.error/value value
-     :pipeline.error/message message}))
-
-;;;
-;;; public
-;;;
-
-
-;;
-;;
-;;
-;; ======================================================
-;; TODO: Make thing work with state under :pipeline/state
-;; ======================================================
-;;
-;;
-;;
-
 (def *pipeline nil)
 
 (defn last-run
@@ -149,108 +118,121 @@
   []
   *pipeline)
 
-(defn- steps [pipeline]
+(defn pipeline?
+  "Returns true if given a valid pipeline"
+  [pipeline]
+  (s/valid? :pipeline/pipeline pipeline))
+
+(defn step?
+  "Returns true if given a valid step"
+  [pipeline]
+  (s/valid? :pipeline/step pipeline))
+
+(defn- kind [pipeline-or-step]
+  (cond
+    (pipeline? pipeline-or-step) :pipeline
+    (step? pipeline-or-step) :step
+    :else :unknown))
+
+(defn steps
+  "Returns the steps in a pipeline"
+  [pipeline]
   (:pipeline/steps pipeline))
 
-(defn pipeline
-  ([] (pipeline (last-run)))
-  ([run]
-   (:pipeline/pipeline run)))
-
 (defn step
-  ([run step-name]
-   (->> run pipeline steps (filter #(= step-name (:pipeline.step/name %))) first)))
+  "Returns a named step in a pipeline"
+  [pipeline step-name]
+  (->> pipeline steps (filter #(= step-name (:pipeline.step/name %))) first))
 
-(defn step-runs
-  ([] (step-runs (last-run)))
-  ([run]
-   (:pipeline/step-runs run)))
+(defn step-name
+  "Returns the name of a step"
+  [step]
+  (:pipeline.step/name step))
 
-(defn step-runs'
-  ([] (step-runs' (last-run)))
-  ([run]
-   (map
-     (fn [step-run] (merge step-run (step run (:pipeline.step/name step-run))))
-     (step-runs run))))
+(declare not-started?)
+(declare successful?)
+(declare failed?)
 
-(defn failed-step? [step]
-  (boolean (:pipeline.error/reason step)))
+(defn state
+  "Returns the state of a pipeline or a step."
+  [pipeline-or-step]
+  {:post [(s/valid? ::state %)]}
+
+  (cond
+    (step? pipeline-or-step)
+    (:pipeline.step/state pipeline-or-step)
+
+    (pipeline? pipeline-or-step)
+    (let [steps (steps pipeline-or-step)]
+      (cond
+        (every? not-started? steps) :not-started
+        (every? successful? steps) :successful
+        (some failed? steps) :failed
+        :else (throw (ex-info "Unknown state in pipeline!" {:pipeline pipeline-or-step}))))))
+
+(defn state? [state-value pipeline-or-step]
+  "Returns the state for a pipeline or a step"
+  (boolean (= state-value (state pipeline-or-step))))
+
+(defn not-started?
+  "Returns true if the pipeline or a step or not started."
+  [pipeline-or-step]
+  (state? :not-started pipeline-or-step))
+
+(defn successful?
+  "Returns true if the pipeline or a step was successful."
+  [pipeline-or-step]
+  (state? :successful pipeline-or-step))
+
+(defn failed?
+  "Returns true if the pipeline or a step was failed."
+  [pipeline-or-step]
+  (state? :failed pipeline-or-step))
 
 (defn failed-steps
-  ([] (failed-steps (last-run)))
-  ([run]
-   (set (filter failed-step? (step-runs run)))))
+  "Returns all failed steps of a pipeline."
+  [pipeline]
+  (filter failed? (steps pipeline)))
 
 
-(defn failed-calls
-  ([] (failed-calls (last-run)))
-  ([run]
-   (let [failed-steps (failed-steps run)
-         steps (set (get-in run [:pipeline/pipeline :pipeline/steps]))
-         foos (set/join failed-steps steps)]
+#_(defn failed-calls
+    ([] (failed-calls (last-run)))
+    ([run]
+     (let [failed-steps (failed-steps run)
+           steps (set (get-in run [:pipeline/pipeline :pipeline/steps]))
+           foos (set/join failed-steps steps)]
 
-     (map
-       (fn [foo]
-         (concat
-           (list (:pipeline.step/function foo))
-           (:pipeline.step-run/args foo)))
-       foos))))
-
-(defn errors
-  ([] (errors (last-run)))
-  ([run]
-   (->>
-     run
-     (failed-steps)
-     (map #(select-keys % [:pipeline.error/message
-                           :pipeline.error/reason
-                           :pipeline.error/value])))))
-
-(def failed-call (comp first failed-calls))
-(def failed-step (comp first failed-steps))
-(def error (comp first errors))
-
-(defn success?
-  "Predicate that returns true if the pipeline result was a success. If no
-  result is given as an argument, the stored result from the last run is used."
-  ([] (success? (last-run)))
-  ([run]
-   (empty? (failed-calls run))))
-
-(defn failure?
-  "Predicate that returns true if the pipeline run resulted in an error.
-  If no result is given as an argument, the stored result from the last run is used."
-  ([] (failure? (last-run)))
-  ([run]
-   (not (success? run))))
-
-(defn exception?
-  "Predicate that returns true if the pipeline run resulted in an exception.
-  If no result is given as an argument, the stored result from the last run is used."
-  ([] (exception? (last-run)))
-  ([run]
-   (= (-> run error :pipeline.error/reason) :exception)))
-
-(defn get-exception   ;; exception
-  "Returns the exception from pipeline result, and nil if the pipeline did not end
-  with an exception.  If no result is given as an argument, the stored result from
-  the last run is used."
-  ([] (get-exception (last-run)))
-  ([result]
-   (when (and (failure? result)
-              (exception? result))
-     (some->> result :pipeline/step-runs last :pipeline.error/value))))
+       (map
+         (fn [foo]
+           (concat
+             (list (:pipeline.step/function foo))
+             (:pipeline.step-run/args foo)))
+         foos))))
 
 (defn result
-  "Returns the output from the last step if the run was successfulr. Always
-  returns nil if the run failed.
-  If no result is given as an argument, the stored result from the last run is used."
-  ([] (result (last-run)))
-  ([run]
-   (if (success? run)
-     (some->> run :pipeline/step-runs last :pipeline.step-run/result)
-     :pipeline/failure)))
+  "Returns the result from a successful step or from a successful pipeline.
+  If the arg is a pipeline, the result is the result of the last step.
 
+  If called on a step that is not successful or a pipeline that is not successful,
+  an exception is thrown."
+  [pipeline-or-step]
+  (if (pipeline? pipeline-or-step)
+    (result (last (steps pipeline-or-step))))
+
+  (if-not
+    (and
+      (or (pipeline? pipeline-or-step)
+          (step? pipeline-or-step))
+      (successful? pipeline-or-step))
+    (throw (ex-info "result can only be retreived from a successful pipeline or step"
+                    {:value pipeline-or-step})))
+
+  (cond
+    (step? pipeline-or-step)
+    (:pipeline.step/result pipeline-or-step)
+
+    (pipeline? pipeline-or-step)
+    (result (last (steps pipeline-or-step)))))
 ;;
 ;; New take
 ;;
@@ -270,11 +252,11 @@
      (let [result (apply f args)]
        (if (valid-result? result)
          {:pipeline.step/time-spent (time-spent start-time (System/nanoTime))
-          :pipeline.step/state :success
+          :pipeline.step/state :successful
           :pipeline.step/result result}
 
          {:pipeline.step/time-spent (time-spent start-time (System/nanoTime))
-          :pipeline.step/state :failure
+          :pipeline.step/state :failed
           :pipeline.step/failure-reason :invalid-output
           :pipeline.step/failure-value result
           :pipeline.step/failure-message (:clojure.spec.alpha/problems
@@ -282,7 +264,7 @@
 
      (catch Exception e
        {:pipeline.step/time-spent (time-spent start-time (System/nanoTime))
-        :pipeline.step/state :failure
+        :pipeline.step/state :failed
         :pipeline.step/failure-reason :exception
         :pipeline.step/failure-value e
         :pipeline.step/failure-message (.getMessage e)}))))
@@ -297,11 +279,11 @@
 
 (defn pipeline-finished? [pipeline]
   (or
-    (every? #(= :success (:pipeline.step/state %)) (:pipeline/steps pipeline))
-    (boolean (some #(= :failure (:pipeline.step/state %)) (:pipeline/steps pipeline)))))
+    (every? #(= :successful (:pipeline.step/state %)) (:pipeline/steps pipeline))
+    (boolean (some #(= :failed (:pipeline.step/state %)) (:pipeline/steps pipeline)))))
 
 (defn next-step [pipeline]
-  (some #(when (= :not-run (:pipeline.step/state %)) %) (:pipeline/steps pipeline)))
+  (some #(when (= :not-started (:pipeline.step/state %)) %) (:pipeline/steps pipeline)))
 
 (defn update-step [step args result]
   (merge step {:pipeline.step/args (into [] args)} result))
@@ -401,7 +383,7 @@
    {:pipeline/steps (->>
                       steps
                       (map-indexed (fn [i step] (assoc step :pipeline.step/seq-id i)))
-                      (map (fn [step] (assoc step :pipeline.step/state :not-run)))
+                      (map (fn [step] (assoc step :pipeline.step/state :not-started)))
                       (into []))
     :pipeline/bindings bindings}))
 

@@ -7,22 +7,6 @@
     [next.jdbc.result-set :as result-set]
     [pipeline.core :as pipeline]
     [pipeline.print :refer :all]))
-;;
-;; Balance in EUR
-;; Get user balance (SEK)
-;; Get conversion rate
-;; Calculate amount
-;; Format response
-;;
-
-
-;;
-;; Balance in EUR
-;; Get user balance (SEK)
-;; Get conversion rate
-;; Calculate amount
-;; Format response
-;;
 
 ;; curl "https://api.exchangeratesapi.io/2020-06-01?base=EUR&symbols=SEK,USD"
 ;; {"rates":{"USD":1.1136,"SEK":10.487},"base":"EUR","date":"2020-05-29"}%
@@ -57,8 +41,6 @@
 ;;
 ;; These are the functions used in the pipeline
 ;;
-
-(use 'debux.core)
 
 (defn db-execute!
   "A thin wrapper around jdbc/execute! that is callable with sql statement separated from the args"
@@ -115,30 +97,32 @@
 
   (populate-database ds)
 
-  (pipeline/run-pipeline example-pipeline {:date-today "1900-06-01"
+  (pipeline/run-pipeline example-pipeline {:date-today "2020-06-01"
                                            :data-source ds
                                            :sql-query "select * from balance where user_id = ?"
                                            :user-id 2
                                            :get-exchange-rate-url "https://api.exchangeratesapi.io"
                                            :base-currency "EUR"})
 
+  (-> (pipeline/last-run) :pipeline/steps (nth 2) pipeline/state)
+
+  (map :pipeline/state (-> (pipeline/last-run) :pipeline/steps))
+  (map :pipeline.step/state (-> (pipeline/last-run) :pipeline/steps))
+  (map pipeline/state (-> (pipeline/last-run) :pipeline/steps))
+  (map pipeline/failed? (-> (pipeline/last-run) :pipeline/steps))
+  (map pipeline/successful? (-> (pipeline/last-run) :pipeline/steps))
+
+  (-> (pipeline/last-run) :pipeline/steps (nth 1) pipeline/failed?)
+  (-> (pipeline/last-run) :pipeline/steps (nth 2) pipeline/failed?)
+
+  (pipeline/state example-pipeline)
   (print-run)
 
-  (require '[datawalk.core :as dc])
-  (dc/repl (pipeline/last-run))
-
-  (pipeline/next-step example-pipeline)
-  (pipeline/next-step (pipeline/last-run))
   (s/valid? :pipeline/pipeline example-pipeline)
   (s/explain :pipeline/pipeline example-pipeline)
-  (s/conform :pipeline/pipeline example-pipeline)
 
-
-  (s/valid? :pipeline/pipeline-definition example-pipeline)
-  (s/explain :pipeline/pipeline-definition example-pipeline)
-
-  (s/valid? :pipeline/pipeline-run (pipeline/last-run))
-  (s/explain :pipeline/pipeline-run (pipeline/last-run))
+  (s/valid? :pipeline/pipeline (pipeline/last-run))
+  (s/explain :pipeline/pipeline (pipeline/last-run))
 
   (pipeline/last-run)
   (pipeline/result)

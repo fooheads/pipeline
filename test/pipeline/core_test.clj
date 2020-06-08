@@ -2,90 +2,105 @@
   (:require
     [clojure.test :refer :all]
     [clojure.spec.alpha :as s]
+    [clojure.string :as str]
     [pipeline.core :as pipeline]
-    [pipeline.print]))
+    [pipeline.print :refer :all]))
 
-(s/def :guitarist/name string?)
-(s/def :guitarist/born integer?)
-(s/def :guitarist/died integer?)
+(defn db-execute!
+  "A thin wrapper around jdbc/execute! that is callable with sql statement separated from the args"
+  [data-source sql-statement & args]
+  (case [sql-statement args]
+    ["select * from balance where user_id = ?" [2]]
+    [{:balance/balance 10000.0
+      :balance/currency "SEK"
+      :balance/id 2
+      :balance/user_id 2}
+     {:balance/balance 1000.0
+      :balance/currency "USD"
+      :balance/id 3
+      :balance/user_id 2}]))
 
-(s/def :guitarist/guitarist (s/keys :req-un [:guitarist/name :guitarist/born]
-                                    :opt-un [:guitarist/died]))
+(defn get-exchange-rates! [base-url date base symbols]
+  (let [options  {:query-params {"base" base "symbols" (str/join "," symbols)}
+                  :as :json}
+        url (format "%s/%s" base-url date)])
+    ;(http/get url options)))
+  {:body {:base "EUR"
+          :date "2020-06-01"
+          :rates {:SEK 10.4635 :USD 1.1116}}})
 
-(defn get-guitarist [guitarist-id]
-  (get
-    {:jimi  {:name "Jimi Hendrix" :born 1942 :died 1970}
-     :duane {:name "Duane Allman" :born 1946 :died 1971}
-     :steve {:name "Steve Vai"    :born 1960}}
-    guitarist-id))
+(defn extract-currencies [balances]
+  (map :balance/currency balances))
 
-(defn calculate-age [born died current-year]
-  (if died
-    (- died born)
-    (- current-year born)))
+(defn calculate-single-value [exchange-rate-map balance-entry]
+  (let [balance (:balance/balance balance-entry)
+        currency (keyword (:balance/currency balance-entry))]
+    (/ balance (get exchange-rate-map currency))))
 
-(defn get-current-year []
-  2019)
+(defn calculate-value [balances exchange-rates]
+  (->>
+    balances
+    (map (partial calculate-single-value exchange-rates))
+    (reduce +)))
 
-(def get-guitarist-step
-  (pipeline/action :get-guitarist #'get-guitarist
-                   [[:guitarist-id]] :guitarist :guitarist/guitarist))
-
-(def get-current-year-step
-   (pipeline/action :get-current-year #'get-current-year [] :current-year #'int?))
-
-(def calculate-age-step
-   (pipeline/transformation :calculate-age #'calculate-age
-                            [[:guitarist :born] [:guitarist :died] [:current-year]]
-                            :guitarist/age #'int?))
 (def example-pipeline
-  (pipeline/pipeline [get-guitarist-step
-                      get-current-year-step
-                      calculate-age-step]))
+  (pipeline/make-pipeline
+    [(pipeline/action
+       :get-balances-for-user #'db-execute!
+       [[:data-source] [:sql-query] [:user-id]] :balances)
 
-(deftest step-schema
-  (is (true? (s/valid? :pipeline/step get-guitarist-step))))
+     (pipeline/transformation
+       :extract-currencies #'extract-currencies [[:balances]] :currencies)
+
+     (pipeline/action
+       :get-exchange-rates #'get-exchange-rates!
+       [[:get-exchange-rate-url] [:date-today] [:base-currency] [:currencies]]
+       :exchange-rates-response)
+
+     (pipeline/transformation
+       :calculate-value #'calculate-value [[:balances] [:exchange-rates-response :body :rates]] :value)]))
+
+(deftest pipeline?-test
+  (is (true? (pipeline/pipeline? example-pipeline)))
+  (is (false? (pipeline/pipeline? (-> example-pipeline pipeline/steps first)))))
+
+(deftest step?-test
+  (is (false? (pipeline/step? example-pipeline)))
+  (is (true? (pipeline/step? (-> example-pipeline pipeline/steps first)))))
+
+(deftest not-started-pipeline
+  (let [run example-pipeline]
+    (is (= :not-started (pipeline/state run)))
+    (is (true? (pipeline/not-started? run)))
+    (is (false? (pipeline/successful? run)))
+    (is (false? (pipeline/failed? run)))
+
+    (is (true? (every? pipeline/not-started? (pipeline/steps run))))))
 
 (deftest successful-pipeline
-  (let [run-pipeline #(pipeline/run-pipeline example-pipeline {:guitarist-id %})]
+  (let [run (pipeline/run-pipeline
+              example-pipeline
+              {:date-today "2020-06-01"
+               :data-source "fake data source"
+               :sql-query "select * from balance where user_id = ?"
+               :user-id 2
+               :get-exchange-rate-url "https://api.exchangeratesapi.io"
+               :base-currency "EUR"})]
 
-    (is (true? (pipeline/success? (run-pipeline :jimi))))
-    (is (= 28  (pipeline/get-output (run-pipeline :jimi))))
+    (is (= :successful (pipeline/state run)))
+    (is (false? (pipeline/not-started? run)))
+    (is (true? (pipeline/successful? run)))
+    (is (false? (pipeline/failed? run)))
+    (is (empty? (pipeline/failed-steps run)))))
 
-    (is (true? (pipeline/success? (run-pipeline :steve))))
-    (is (= 59  (pipeline/get-output (run-pipeline :steve))))
-
-    (is (= 59  (pipeline/get-output (run-pipeline :steve))))))
-
-(deftest failing-pipeline
-  ;; make get-current-year step return invalid data
-  (with-redefs [get-current-year (constantly nil)]
-    (let [run-pipeline #(pipeline/run-pipeline example-pipeline {:guitarist-id %})
-          error (pipeline/get-error (run-pipeline :steve))]
-
-      (is (= :get-current-year (:pipeline.step/name error)))
-      (is (= nil (:pipeline.error/value error))))))
-
-(deftest exception-throwing-pipeline
-  ;; make get-current-year step throw exception
-  (with-redefs [get-current-year #(throw (ex-info "Problem!" {:some :problem}))]
-    (let [run-pipeline #(pipeline/run-pipeline example-pipeline {:guitarist-id %})
-          result (run-pipeline :steve)
-          error (pipeline/get-error result)]
-
-      (def *foo result)
-
-
-      (is (= :get-current-year (:pipeline.step/name error)))
-      (is (= "Problem!" (:pipeline.error/message error)))
-      (is (= {:some :problem} (-> error :pipeline.error/value ex-data)))
-      (is (not= nil (re-find #"(?im):get-current-year"
-                             (with-out-str (pipeline.print/print-result)))))
-      (is (not= nil (re-find #"(?im)Problem"
-                             (with-out-str (pipeline.print/print-result))))))))
-
-(comment
-  (with-redefs [get-current-year (constantly nil)]
-    (pipeline/run-pipeline example-pipeline {:guitarist-id :jimi})))
+(deftest failed-pipeline
+  (with-redefs [db-execute! #(throw (ex-info "Problem!" {:some :problem}))]
+    (let [run (pipeline/run-pipeline example-pipeline {})]
+      (is (= :failed (pipeline/state run)))
+      (is (false? (pipeline/not-started? run)))
+      (is (false? (pipeline/successful? run)))
+      (is (true? (pipeline/failed? run)))
+      (is (= [:get-balances-for-user]
+             (map pipeline/step-name (pipeline/failed-steps run)))))))
 
 

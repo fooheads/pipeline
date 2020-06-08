@@ -31,13 +31,13 @@
     (print-exception error)
     (print-validation-error error)))
 
-(defn print-result
-  "Prints the result of the last or given in a human friendly way."
-  ([] (print-result (pipeline/last-run)))
-  ([run]
-   (if (pipeline/success? run)
-     (println (format "Success!\n\n%s" (pr-str (pipeline/result run))))
-     (print-error (pipeline/error run)))))
+#_(defn print-result
+    "Prints the result of the last or given in a human friendly way."
+    ([] (print-result (pipeline/last-run)))
+    ([run]
+     (if (pipeline/successful? run)
+       (println (format "Success!\n\n%s" (pr-str (pipeline/result run))))
+       (print-error (pipeline/error run)))))
 
 (defn print-failed-call
   "Prints the call that failed as close as possible to what a conctete call
@@ -45,7 +45,7 @@
   executed for further debugging"
   ([] (print-failed-call (pipeline/last-run)))
   ([result]
-   (when (pipeline/failure? result)
+   (when (pipeline/failed? result)
      (let [step (-> result :pipeline/error)
            f (:pipeline.step/function step)
            input-paths (:pipeline.step/input-paths step)
@@ -55,10 +55,10 @@
          (println (str "(" f " " (str/join " " (map pr-str args)) ")"))
          (println (str "(" f ")")))))))
 
-(defn print-pipeline
-  ([] (print-pipeline (pipeline/last-run)))
-  ([pipeline-or-run]
-   (print-table (:pipeline/steps (or (pipeline/pipeline pipeline-or-run) pipeline-or-run)))))
+#_(defn print-pipeline
+    ([] (print-pipeline (pipeline/last-run)))
+    ([pipeline-or-run]
+     (print-table (:pipeline/steps (or (pipeline/pipeline pipeline-or-run) pipeline-or-run)))))
 
 (defn ->short-str [len v]
   (let [s (str v)]

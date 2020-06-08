@@ -11,8 +11,8 @@ Description will come later. See tests for examples.
 * [x] Replace malli with spec
 * [x] Add action and transformation construction functions
 * [x] Restructure internal context
-* [ ] Make better example with sql and http
-* [ ] Fake sql and http in test
+* [x] Make better example with sql and http
+* [x] Fake sql and http in test
 * [ ] Add missing accessors
 * [ ] add pipeline binding and get-binding accessor
 * [ ] add step binding and get-step-binding and a second optional argument to get-binding
