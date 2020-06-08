@@ -13,6 +13,8 @@ Description will come later. See tests for examples.
 * [x] Restructure internal context
 * [x] Make better example with sql and http
 * [x] Fake sql and http in test
+* [x] allow both simple and qualified keywords as input paths
+* [ ] allow both simple and qualified keywords as output path
 * [ ] Add missing accessors
 * [ ] add pipeline binding and get-binding accessor
 * [ ] add step binding and get-step-binding and a second optional argument to get-binding
@@ -20,7 +22,6 @@ Description will come later. See tests for examples.
 * [ ] print/return pipeline (static structure)
 * [ ] print/return pipeline run (results of steps)
 * [ ] print-call, not only print-failed-call (for putting in logs)
-* [ ] allow both simple and qualified keywords as well as paths as input and output
 * [ ] validate pipeline w/ explain
 * [ ] repl support for platform objects, e.g. data sources
 * [ ] option can contain "spec" validation function (malli, spec, schema, ...)

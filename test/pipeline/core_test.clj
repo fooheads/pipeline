@@ -45,18 +45,22 @@
 
 (def example-pipeline
   (pipeline/make-pipeline
+
+    ;; with simple keywords on input paths
     [(pipeline/action
        :get-balances-for-user #'db-execute!
-       [[:data-source] [:sql-query] [:user-id]] :balances)
+       [:data-source :sql-query :user-id] :balances)
 
      (pipeline/transformation
        :extract-currencies #'extract-currencies [[:balances]] :currencies)
 
+     ;; with all paths as inputs paths
      (pipeline/action
        :get-exchange-rates #'get-exchange-rates!
        [[:get-exchange-rate-url] [:date-today] [:base-currency] [:currencies]]
        :exchange-rates-response)
 
+     ;; with mixed keywords and paths as input paths
      (pipeline/transformation
        :calculate-value #'calculate-value [[:balances] [:exchange-rates-response :body :rates]] :value)]))
 

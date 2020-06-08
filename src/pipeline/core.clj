@@ -274,7 +274,8 @@
 (defn args-for-step [step state]
   (map
     (fn [input-path]
-      (get-in state input-path))
+      (let [path (if (simple-keyword? input-path) [input-path] input-path)]
+        (get-in state path)))
     (:pipeline.step/input-paths step)))
 
 (defn pipeline-finished? [pipeline]
@@ -377,8 +378,8 @@
   ([steps]
    (make-pipeline steps {}))
   ([steps bindings]
-   {};; :pre [(s/valid? :pipeline/step-definitions steps)]
-    ;;:post [(s/valid? :pipeline/pipeline %)]}
+   {;; :pre [(s/valid? :pipeline/step-definitions steps)]
+    :post [(s/valid? :pipeline/pipeline %)]}
 
    {:pipeline/steps (->>
                       steps
