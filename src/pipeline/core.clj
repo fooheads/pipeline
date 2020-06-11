@@ -282,7 +282,7 @@
 (defn args-for-step [step state]
   (map
     (fn [input-path]
-      (let [path (if (simple-keyword? input-path) [input-path] input-path)]
+      (let [path (if (keyword? input-path) [input-path] input-path)]
         (get-in state path)))
     (:pipeline.step/input-paths step)))
 
