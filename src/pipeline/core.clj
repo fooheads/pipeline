@@ -202,6 +202,13 @@
   [pipeline]
   (filter failed? (steps pipeline)))
 
+(defn failed-step
+  "Returns the first failed step of a pipeline."
+  [pipeline]
+  (first (failed-steps pipeline)))
+
+(defn failure-reason [step]
+  (:pipeline.step/failure-reason step))
 
 #_(defn failed-calls
     ([] (failed-calls (last-run)))
