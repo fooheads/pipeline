@@ -25,7 +25,7 @@
 ;;;
 
 (s/def ::bindings (s/map-of keyword? any?))
-(s/def :pipeline/bindings ::bindings)
+(s/def ::validation-functions (s/map-of keyword? ifn?))
 
 ;; Things that exist before a step is executed.
 
@@ -103,9 +103,10 @@
 (s/def :pipeline/step (s/multi-spec pipeline-step :pipeline.step/state))
 (s/def :pipeline/steps (s/coll-of :pipeline/step))
 (s/def :pipeline/bindings ::bindings)
+(s/def :pipeline/validation-functions ::validation-functions)
 
 (s/def :pipeline/pipeline
-  (s/keys :req [:pipeline/steps :pipeline/bindings]))
+  (s/keys :req [:pipeline/steps :pipeline/bindings :pipeline/validation-functions]))
 
 (def *pipeline nil)
 
@@ -161,6 +162,13 @@
     (pipeline? pipeline-or-step)
     (:pipeline/bindings pipeline-or-step)))
 
+(defn validation-functions
+  "Returns the validation functions for  a pipeline"
+  [pipeline]
+  {:post [(s/valid? ::validation-functions %)]}
+
+  (:pipeline/validation-functions pipeline))
+
 (defn state
   "Returns the state of a pipeline or a step."
   [pipeline-or-step]
@@ -210,6 +218,12 @@
 (defn failure-reason [step]
   (:pipeline.step/failure-reason step))
 
+(defn failure-value [step]
+  (:pipeline.step/failure-value step))
+
+(defn failure-message [step]
+  (:pipeline.step/failure-message step))
+
 #_(defn failed-calls
     ([] (failed-calls (last-run)))
     ([run]
@@ -252,7 +266,7 @@
 ;; New take
 ;;
 
-(defn run-step [f args output-schema]
+(defn run-step [f args output-schema state validation-functions]
   "Runs a single step. This is called from run-pipeline and normally not used directly,
   but is still public since it can be useful during development."
 
@@ -260,8 +274,9 @@
                      (/ (double (- stop-time start-time)) 1000000.0))
         start-time (System/nanoTime)
         spec (if output-schema (resolve-spec output-schema))
-        valid-result? #(if spec (s/valid? spec %) %)
-        explain-invalid-output #(:clojure.spec.alpha/problems (s/explain-data spec %))]
+        valid? (get validation-functions :valid?)
+        explain (get validation-functions :explain)
+        valid-result? #(if spec (valid? state spec %) %)]
 
     (try
      (let [result (apply f args)]
@@ -274,8 +289,7 @@
           :pipeline.step/state :failed
           :pipeline.step/failure-reason :invalid-output
           :pipeline.step/failure-value result
-          :pipeline.step/failure-message (:clojure.spec.alpha/problems
-                                           (explain-invalid-output result))}))
+          :pipeline.step/failure-message (explain state spec result)}))
 
      (catch Exception e
        {:pipeline.step/time-spent (time-spent start-time (System/nanoTime))
@@ -356,12 +370,29 @@
              f (:pipeline.step/function step)
              args (args-for-step step state)
              output-schema (:pipeline.step/output-schema step)
-             result (run-step f args output-schema)
+             result (run-step f args output-schema state (validation-functions pipeline))
              step' (update-step step args result)
              pipeline' (update-pipeline pipeline step')
              state' (update-state state step')]
          (recur state' pipeline'))))))
 
+;;
+;; precedence nu
+;; 1. step
+;; 2. args
+;; 3. pipeline
+
+;;
+;; precedence nu
+;; 1. step
+;; 2. pipeline
+;; 3. args
+
+;;
+;; precedence nu
+;; 1. args
+;; 2. pipeline
+;; 3. step
 
 ;;;
 ;;; Helper functions
@@ -397,10 +428,23 @@
     :pipeline.step/output-path output
     :pipeline.step/output-schema output-spec}))
 
+
+(defn valid? [context spec v]
+  (s/valid? spec v))
+
+(defn explain-data [context spec v]
+  (s/explain-data spec v))
+
+(def default-validation-functions
+  {:valid? valid?
+   :explain explain-data})
+
 (defn make-pipeline
   ([steps]
-   (make-pipeline steps {}))
+   (make-pipeline steps {} default-validation-functions))
   ([steps bindings]
+   (make-pipeline steps bindings default-validation-functions))
+  ([steps bindings validation-functions]
    {:post [(s/valid? :pipeline/pipeline %)]}
 
    {:pipeline/steps (->>
@@ -408,7 +452,8 @@
                       (map-indexed (fn [i step] (assoc step :pipeline.step/seq-id i)))
                       (map (fn [step] (assoc step :pipeline.step/state :not-started)))
                       (into []))
-    :pipeline/bindings bindings}))
+    :pipeline/bindings bindings
+    :pipeline/validation-functions validation-functions}))
 
 
 (comment

@@ -57,7 +57,8 @@
 
 (def step-calculate-value ;; with mixed keywords and paths as input paths
   (pipeline/transformation :calculate-value #'calculate-value
-                           [:balances [:exchange-rates-response :body :rates]] :value))
+                           [:balances [:exchange-rates-response :body :rates]]
+                           :value double?))
 
 (def steps
   [step-get-balances-for-user
@@ -98,17 +99,40 @@
     (is (false? (pipeline/not-started? run)))
     (is (true? (pipeline/successful? run)))
     (is (false? (pipeline/failed? run)))
-    (is (empty? (pipeline/failed-steps run)))))
+    (is (empty? (pipeline/failed-steps run)))
+    (is (= 1855.3073327623074 (pipeline/result run)))))
 
-(deftest failed-pipeline
-  (with-redefs [db-execute! #(throw (ex-info "Problem!" {:some :problem}))]
+(deftest failed-pipeline-exception
+  (with-redefs [db-execute! (fn [& args] (throw (ex-info "Problem!" {:some :problem})))]
     (let [run (pipeline/run-pipeline example-pipeline {})]
       (is (= :failed (pipeline/state run)))
       (is (false? (pipeline/not-started? run)))
       (is (false? (pipeline/successful? run)))
       (is (true? (pipeline/failed? run)))
       (is (= [:get-balances-for-user]
-             (map pipeline/step-name (pipeline/failed-steps run)))))))
+             (map pipeline/step-name (pipeline/failed-steps run))))
+
+      (is (= :exception (-> run pipeline/failed-step pipeline/failure-reason)))
+      (is (= "Problem!" (-> run pipeline/failed-step pipeline/failure-message)))
+
+      (let [e (-> run pipeline/failed-step pipeline/failure-value)]
+        (is (= "Problem!" (.getMessage e)))
+        (is (= {:some :problem} (ex-data e)))))))
+
+(deftest failed-pipeline-validation-error
+  (with-redefs [calculate-value (fn [& args] "oopsie")]
+    (let [run (pipeline/run-pipeline example-pipeline args)]
+      (print-run)
+      (is (= :failed (pipeline/state run)))
+      (is (false? (pipeline/not-started? run)))
+      (is (false? (pipeline/successful? run)))
+      (is (true? (pipeline/failed? run)))
+      (is (= [:calculate-value]
+             (map pipeline/step-name (pipeline/failed-steps run))))
+
+      (is (= :invalid-output (-> run pipeline/failed-step pipeline/failure-reason)))
+      (is (= "oopsie" (-> run pipeline/failed-step pipeline/failure-message
+                          (get-in [:clojure.spec.alpha/problems 0 :val])))))))
 
 (deftest pipeline-bindings-test
   (with-redefs [get-exchange-rates! (fn [base-url date base symbols]
