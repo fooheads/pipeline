@@ -334,7 +334,9 @@
     (assoc-in pipeline path step)))
 
 (defn update-state [state step]
-  (assoc state (:pipeline.step/output-path step) (:pipeline.step/result step)))
+  (let [output-path (:pipeline.step/output-path step)
+        path (if (keyword? output-path) [output-path] output-path)]
+    (assoc-in state path (:pipeline.step/result step))))
 
 (defn run-pipeline
   "Executes a pipeline and returns the full execution context as a result. In the execution context,
