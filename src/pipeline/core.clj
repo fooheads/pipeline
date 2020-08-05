@@ -276,7 +276,7 @@
         spec (if output-schema (resolve-spec output-schema))
         valid? (get validation-functions :valid?)
         explain (get validation-functions :explain)
-        valid-result? #(if spec (valid? state spec %) %)]
+        valid-result? #(if spec (valid? state spec %) true)]
 
     (try
      (let [result (apply f args)]
