@@ -39,6 +39,7 @@
        (println (format "Success!\n\n%s" (pr-str (pipeline/result run))))
        (print-error (pipeline/error run)))))
 
+
 (defn print-failed-call
   "Prints the call that failed as close as possible to what a conctete call
   would look like. Normally, this output can be pasted into the REPL and
@@ -46,11 +47,10 @@
   ([] (print-failed-call (pipeline/last-run)))
   ([result]
    (when (pipeline/failed? result)
-     (let [step (-> result :pipeline/error)
+     (let [step (pipeline/failed-step result)
            f (:pipeline.step/function step)
            input-paths (:pipeline.step/input-paths step)
-           args (map #(get-in result %) input-paths)]
-       (prn "args: " args)
+           args (pipeline/args-for-step step result)]
        (if-not (empty? args)
          (println (str "(" f " " (str/join " " (map pr-str args)) ")"))
          (println (str "(" f ")")))))))
