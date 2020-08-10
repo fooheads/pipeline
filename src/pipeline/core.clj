@@ -418,9 +418,9 @@
 
 (defn transformation
   ([step-name f inputs output]
-   (action step-name f inputs output nil {}))
+   (transformation step-name f inputs output nil {}))
   ([step-name f inputs output output-spec]
-   (action step-name f inputs output output-spec {}))
+   (transformation step-name f inputs output output-spec {}))
   ([step-name f inputs output output-spec bindings]
    {:pipeline.step/bindings bindings
     :pipeline.step/name step-name
