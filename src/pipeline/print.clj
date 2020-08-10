@@ -82,12 +82,12 @@
 
 (defn print-run
   ([] (print-run (pipeline/last-run)))
-  ([run]
-   (let [ks [:seq-id :state :name :function :args :result]]
-     (->>
-       run
-       :pipeline/steps
-       (map #(map-vals (partial ->short-str 35) %))
-       (map #(map-keys (comp keyword name) %))
-       (print-table ks)))))
+  ([run] (print-run run [:seq-id :state :name :function :args :result]))
+  ([run ks]
+   (->>
+     run
+     :pipeline/steps
+     (map #(map-vals (partial ->short-str 35) %))
+     (map #(map-keys (comp keyword name) %))
+     (print-table ks))))
 
