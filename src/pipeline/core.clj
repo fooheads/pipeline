@@ -137,9 +137,14 @@
   (:pipeline/steps pipeline))
 
 (defn step
-  "Returns a named step in a pipeline"
+  "Returns a named or numbered (seq-id) step in a pipeline"
   [pipeline step-name]
-  (->> pipeline steps (filter #(= step-name (:pipeline.step/name %))) first))
+  (->>
+    pipeline
+    steps
+    (filter #(or (= step-name (:pipeline.step/name %))
+                 (= step-name (:pipeline.step/seq-id %))))
+    first))
 
 (defn step-name
   "Returns the name of a step"
