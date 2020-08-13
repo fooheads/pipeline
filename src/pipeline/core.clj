@@ -463,19 +463,6 @@
     :pipeline/validation-functions validation-functions}))
 
 
-(comment
-  (defn normalize [normalization-spec set-of-trees])
-
-  {:steps [{:name :normalize
-            :function #'normalize
-            :binding {:normalization-spec [[:AppointmentDetails/AppointmentDetailsID] ,,,]}
-            :input-paths [[:normalization-spec] [:result-trees]]
-            :output-path :normalized-trees}]
-   :binding {:spm-auth-key "sdfjhkjlh12322"}
-   :params {:data-source #'data-source?
-            :spm-url #'url?}
-   :repl {:datasource "@repl/ds"}})
-
 
 
 
