@@ -25,7 +25,7 @@
 ;;;
 
 (s/def ::bindings (s/map-of keyword? any?))
-(s/def ::validation-functions (s/map-of keyword? ifn?))
+(s/def ::validation-fns (s/map-of keyword? ifn?))
 
 ;; Things that exist before a step is executed.
 
@@ -46,6 +46,7 @@
 
 (s/def :pipeline.step/output-path ::path)
 (s/def :pipeline.step/output-schema any?)   ;; spec
+(s/def :pipeline.step/validation-fns ::validation-fns)
 
 ;; Things that are added when a step can be / is executed.
 (s/def :pipeline.step/args (s/coll-of any?))
@@ -70,7 +71,8 @@
                 :pipeline.step/function
                 :pipeline.step/input-paths
                 :pipeline.step/output-path
-                :pipeline.step/output-schema]))
+                :pipeline.step/output-schema
+                :pipeline.step/validation-fns]))
 
 (defmethod pipeline-step :successful [_]
   (s/keys :req [:pipeline.step/bindings
@@ -82,6 +84,7 @@
                 :pipeline.step/input-paths
                 :pipeline.step/output-path
                 :pipeline.step/output-schema
+                :pipeline.step/validation-fns
                 :pipeline.step/result
                 :pipeline.step/time-spent]))
 
@@ -95,6 +98,7 @@
                 :pipeline.step/input-paths
                 :pipeline.step/output-path
                 :pipeline.step/output-schema
+                :pipeline.step/validation-fns
                 :pipeline.step/failure-reason
                 :pipeline.step/failure-value
                 :pipeline.step/failure-message]))
@@ -102,11 +106,9 @@
 (s/def :pipeline/state ::state)
 (s/def :pipeline/step (s/multi-spec pipeline-step :pipeline.step/state))
 (s/def :pipeline/steps (s/coll-of :pipeline/step))
-(s/def :pipeline/bindings ::bindings)
-(s/def :pipeline/validation-functions ::validation-functions)
 
 (s/def :pipeline/pipeline
-  (s/keys :req [:pipeline/steps :pipeline/bindings :pipeline/validation-functions]))
+  (s/keys :req [:pipeline/steps]))
 
 (def *pipeline nil)
 
@@ -158,7 +160,7 @@
 (defn bindings
   "Returns the bindings of a pipeline or a step."
   [pipeline-or-step]
-  {:post [(s/valid? ::bindings %)]}
+  ;{:post [(s/valid? ::bindings %)]}
 
   (cond
     (step? pipeline-or-step)
@@ -168,11 +170,9 @@
     (:pipeline/bindings pipeline-or-step)))
 
 (defn validation-functions
-  "Returns the validation functions for  a pipeline"
-  [pipeline]
-  {:post [(s/valid? ::validation-functions %)]}
-
-  (:pipeline/validation-functions pipeline))
+  "Returns the validation functions for a step"
+  [step]
+  (:pipeline.step/validation-fns step))
 
 (defn state
   "Returns the state of a pipeline or a step."
@@ -271,7 +271,7 @@
 ;; New take
 ;;
 
-(defn run-step [f args output-schema state validation-functions]
+(defn run-step [f args output-schema state validation-fns]
   "Runs a single step. This is called from run-pipeline and normally not used directly,
   but is still public since it can be useful during development."
 
@@ -279,8 +279,8 @@
                      (/ (double (- stop-time start-time)) 1000000.0))
         start-time (System/nanoTime)
         spec (if output-schema (resolve-spec output-schema))
-        valid? (get validation-functions :valid?)
-        explain (get validation-functions :explain)
+        valid? (get validation-fns :valid?)
+        explain (get validation-fns :explain)
         valid-result? #(if spec (valid? state spec %) true)]
 
     (try
@@ -377,11 +377,22 @@
              f (:pipeline.step/function step)
              args (args-for-step step state)
              output-schema (:pipeline.step/output-schema step)
-             result (run-step f args output-schema state (validation-functions pipeline))
+             validation-fns (:pipeline.step/validation-fns step)
+             result (run-step f args output-schema state validation-fns)
              step' (update-step step args result)
              pipeline' (update-pipeline pipeline step')
              state' (update-state state step')]
          (recur state' pipeline'))))))
+
+(defn valid? [context spec v]
+  (s/valid? spec v))
+
+(defn explain-data [context spec v]
+  (s/explain-data spec v))
+
+(def default-validation-fns
+  {:valid? valid?
+   :explain explain-data})
 
 ;;
 ;; precedence nu
@@ -405,64 +416,112 @@
 ;;; Helper functions
 ;;;
 
+(defn make-step
+  [step-type step-name f inputs output output-spec bindings validation-fns]
+  {:pipeline.step/type step-type
+   :pipeline.step/name step-name
+   :pipeline.step/function f
+   :pipeline.step/input-paths inputs
+   :pipeline.step/output-path output
+   :pipeline.step/output-schema output-spec
+   :pipeline.step/bindings bindings
+   :pipeline.step/validation-fns validation-fns
+   :pipeline.step/seq-id 0
+   :pipeline.step/state :not-started})
+
 (defn action
   ([step-name f inputs]
-   (action step-name f inputs nil nil {}))
+   (make-step :action step-name f inputs nil nil {} default-validation-fns))
   ([step-name f inputs output]
-   (action step-name f inputs output nil {}))
+   (make-step :action step-name f inputs output nil {} default-validation-fns))
   ([step-name f inputs output output-spec]
-   (action step-name f inputs output output-spec {}))
+   (make-step :action step-name f inputs output output-spec {} default-validation-fns))
   ([step-name f inputs output output-spec bindings]
-   {:pipeline.step/bindings bindings
-    :pipeline.step/name step-name
-    :pipeline.step/type :action
-    :pipeline.step/function f
-    :pipeline.step/input-paths inputs
-    :pipeline.step/output-path output
-    :pipeline.step/output-schema output-spec}))
+   (make-step :action step-name f inputs output output-spec bindings default-validation-fns))
+  ([step-name f inputs output output-spec bindings validation-fns]
+   (make-step :action step-name f inputs output output-spec bindings validation-fns)))
 
 (defn transformation
   ([step-name f inputs output]
-   (transformation step-name f inputs output nil {}))
+   (make-step :transformation step-name f inputs output nil {} default-validation-fns))
   ([step-name f inputs output output-spec]
-   (transformation step-name f inputs output output-spec {}))
+   (make-step :transformation step-name f inputs output output-spec {} default-validation-fns))
   ([step-name f inputs output output-spec bindings]
-   {:pipeline.step/bindings bindings
-    :pipeline.step/name step-name
-    :pipeline.step/type :transformation
-    :pipeline.step/function f
-    :pipeline.step/input-paths inputs
-    :pipeline.step/output-path output
-    :pipeline.step/output-schema output-spec}))
-
-
-(defn valid? [context spec v]
-  (s/valid? spec v))
-
-(defn explain-data [context spec v]
-  (s/explain-data spec v))
-
-(def default-validation-functions
-  {:valid? valid?
-   :explain explain-data})
+   (make-step :transformation step-name f inputs output output-spec bindings default-validation-fns))
+  ([step-name f inputs output output-spec bindings validation-fns]
+   (make-step :transformation step-name f inputs output output-spec bindings validation-fns)))
 
 (defn make-pipeline
-  ([steps]
-   (make-pipeline steps {} default-validation-functions))
-  ([steps bindings]
-   (make-pipeline steps bindings default-validation-functions))
-  ([steps bindings validation-functions]
-   {:post [(s/valid? :pipeline/pipeline %)]}
+  [pipeline-bindings & steps-and-pipelines]
+  (if-not (s/valid? ::bindings pipeline-bindings)
+    (throw (ex-info (with-out-str (s/explain ::bindings pipeline-bindings))
+                    {})))
+  (let [steps'
+        (reduce
+          (fn [sum item]
+            ;(prn "sum" sum "item" item)
+            (cond
+              (s/valid? :pipeline/step item)
+              (concat sum [item])
 
-   {:pipeline/steps (->>
-                      steps
-                      (map-indexed (fn [i step] (assoc step :pipeline.step/seq-id i)))
-                      (map (fn [step] (assoc step :pipeline.step/state :not-started)))
-                      (into []))
-    :pipeline/bindings bindings
-    :pipeline/validation-functions validation-functions}))
+              (s/valid? :pipeline/steps item)
+              (concat sum item)
 
+              (s/valid? :pipeline/pipeline item)
+              (concat sum (steps item))
 
+              :else
+              (throw (ex-info "Not a step, steps or pipeline" {:item item}))))
+          []
+          steps-and-pipelines)
+
+        ;_ (prn "steps'" steps')
+
+        steps''
+        (->>
+          steps'
+          (map-indexed (fn [i step] (assoc step :pipeline.step/seq-id i)))
+          (map (fn [step] (assoc step :pipeline.step/state :not-started)))
+          (map (fn [step] (assoc step :pipeline.step/bindings (merge (bindings step) pipeline-bindings))))
+          (into []))
+
+        pipeline
+        {:pipeline/steps steps''}]
+
+    (if (s/valid? :pipeline/pipeline pipeline)
+      pipeline
+      (throw (ex-info
+               "Invalid pipeline."
+               {:pipeline pipeline
+                :explanation (s/explain :pipeline/pipeline pipeline)})))))
+
+#_(defn make-pipeline
+    ([steps]
+     (make-pipeline steps {} default-validation-fns))
+    ([steps bindings]
+     (make-pipeline steps bindings default-validation-fns))
+    ([steps bindings validation-fns]
+     ;{:post [(s/valid? :pipeline/pipeline %)]}
+     (let [pipeline
+           {:pipeline/steps (->>
+                              steps
+                              (map-indexed (fn [i step] (assoc step :pipeline.step/seq-id i)))
+                              (map (fn [step] (assoc step :pipeline.step/state :not-started)))
+                              ;; Add validation functions to the step unless it already
+                              ;; has validation functions.
+                              (map (fn [step]
+                                     (if (validation-functions step)
+                                       step
+                                       (assoc step :pipeline.step/validation-fns
+                                              validation-fns))))
+                              (into []))
+            :pipeline/bindings bindings}]
+       (if (s/valid? :pipeline/pipeline pipeline)
+         pipeline
+         (throw (ex-info
+                  "Invalid pipeline."
+                  {:pipeline pipeline
+                   :explanation (s/explain :pipeline/pipeline pipeline)}))))))
 
 
 

@@ -66,7 +66,25 @@
    step-get-exchange-rates
    step-calculate-value])
 
-(def example-pipeline (pipeline/make-pipeline steps))
+(def example-pipeline
+  (pipeline/make-pipeline
+    {}
+    step-get-balances-for-user
+    step-extract-currencies
+    step-get-exchange-rates
+    step-calculate-value))
+
+(pipeline/steps example-pipeline)
+
+(comment
+  (def ex *e)
+  (s/valid? :pipeline/step (:item (ex-data ex)))
+  (s/explain :pipeline/step (:item (ex-data ex)))
+  (s/explain :pipeline.step/seq-id 1)
+  (s/explain :pipeline.step/seq-id "1")
+
+  (s/explain :pipeline/step {})
+  (s/form :pipeline/step))
 
 (def args
   {:date-today "2020-06-01"
@@ -142,7 +160,7 @@
                                                 :date "2020-06-01"
                                                 :rates {:SEK 10.4635 :USD 1.1116}}}))]
 
-    (let [pl (pipeline/make-pipeline steps {:get-exchange-rate-url "http://foo.com/bar"})]
+    (let [pl (pipeline/make-pipeline {:get-exchange-rate-url "http://foo.com/bar"} steps)]
       (let [run (pipeline/run-pipeline pl (dissoc args :get-exchange-rate-url))]
         (is (= :successful (pipeline/state run)))))))
 
@@ -166,8 +184,55 @@
                  step-get-exchange-rates-with-binding
                  step-calculate-value]
 
-          pl (pipeline/make-pipeline steps {})]
+          pl (pipeline/make-pipeline {} steps)]
       (let [run (pipeline/run-pipeline pl (dissoc args :get-exchange-rate-url))]
         (is (= :successful (pipeline/state run)))))))
+
+(deftest make-pipeline-test
+  (let [p1 ; a pipeline made by passing variable number of steps
+        (pipeline/make-pipeline
+          {}
+          step-get-balances-for-user
+          step-extract-currencies
+          step-get-exchange-rates
+          step-calculate-value)
+
+        p2 ; a pipeline made by passing a list of steps
+        (pipeline/make-pipeline
+          {}
+          [step-get-balances-for-user
+           step-extract-currencies
+           step-get-exchange-rates
+           step-calculate-value])
+
+        p3 ; a pipeline made by passing variable num of pipelines
+        (pipeline/make-pipeline
+          {}
+          (pipeline/make-pipeline
+            {}
+            step-get-balances-for-user
+            step-extract-currencies)
+          (pipeline/make-pipeline
+            {}
+            step-get-exchange-rates
+            step-calculate-value))
+
+        p4 ; a pipeline made by passing all kinds of combinatins
+        (pipeline/make-pipeline
+          {}
+          (pipeline/make-pipeline
+            {}
+            step-get-balances-for-user
+            step-extract-currencies)
+          [step-get-exchange-rates]
+          step-calculate-value)]
+
+    (is (= p1 p1))
+    (is (= p1 p2))
+    (is (= p1 p3))
+    (is (= p1 p4))
+    (is (= p2 p3))))
+
+
 
 
