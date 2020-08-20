@@ -39,6 +39,17 @@
        (println (format "Success!\n\n%s" (pr-str (pipeline/result run))))
        (print-error (pipeline/error run)))))
 
+(defn print-call
+  "Prints the call as close as possible to what a conctete call
+  would look like. Normally, this output can be pasted into the REPL and
+  executed for further debugging"
+  [step]
+  (let [f (:pipeline.step/function step)
+        input-paths (:pipeline.step/input-paths step)
+        args (:pipeline.step/args step)]
+    (if-not (empty? args)
+      (println (str "(" f " " (str/join " " (map pr-str args)) ")"))
+      (println (str "(" f ")")))))
 
 (defn print-failed-call
   "Prints the call that failed as close as possible to what a conctete call
@@ -47,18 +58,9 @@
   ([] (print-failed-call (pipeline/last-run)))
   ([result]
    (when (pipeline/failed? result)
-     (let [step (pipeline/failed-step result)
-           f (:pipeline.step/function step)
-           input-paths (:pipeline.step/input-paths step)
-           args (pipeline/args-for-step step result)]
-       (if-not (empty? args)
-         (println (str "(" f " " (str/join " " (map pr-str args)) ")"))
-         (println (str "(" f ")")))))))
+     (let [step (pipeline/failed-step result)]
+       (print-call step)))))
 
-#_(defn print-pipeline
-    ([] (print-pipeline (pipeline/last-run)))
-    ([pipeline-or-run]
-     (print-table (:pipeline/steps (or (pipeline/pipeline pipeline-or-run) pipeline-or-run)))))
 
 (defn ->short-str [len v]
   (let [s (str v)]
