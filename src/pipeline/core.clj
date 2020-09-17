@@ -271,7 +271,7 @@
 ;; New take
 ;;
 
-(defn run-step [f args output-schema state validation-fns]
+(defn run-step [f args output-schema state validation-fns options]
   "Runs a single step. This is called from run-pipeline and normally not used directly,
   but is still public since it can be useful during development."
 
@@ -281,7 +281,11 @@
         spec (if output-schema (resolve-spec output-schema))
         valid? (get validation-fns :valid?)
         explain (get validation-fns :explain)
-        valid-result? #(if spec (valid? state spec %) true)]
+        valid-result? #(if spec (valid? state spec %) true)
+        trace-fn (:trace-fn options)]
+
+    (when trace-fn
+      (trace-fn {:f f :args args}))
 
     (try
      (let [result (apply f args)]
@@ -378,7 +382,7 @@
              args (args-for-step step state)
              output-schema (:pipeline.step/output-schema step)
              validation-fns (:pipeline.step/validation-fns step)
-             result (run-step f args output-schema state validation-fns)
+             result (run-step f args output-schema state validation-fns options)
              step' (update-step step args result)
              pipeline' (update-pipeline pipeline step')
              state' (update-state state step')]
