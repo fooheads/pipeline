@@ -333,8 +333,8 @@
       (keep-indexed
         (fn [i st]
           (when
-            (= (:pipeline.step/name st)
-               (:pipeline.step/name step))
+            (= (:pipeline.step/seq-id st)
+               (:pipeline.step/seq-id step))
             i))
         (:pipeline/steps pipeline)))])
 
