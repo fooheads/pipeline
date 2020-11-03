@@ -1,7 +1,7 @@
 (ns pipeline.core-test
   (:require
     [clojure.test :refer :all]
-    [clojure.spec.alpha :as s]
+    ;[clojure.spec.alpha :as s]
     [clojure.string :as str]
     [pipeline.core :as pipeline]
     [pipeline.print :refer :all]))
@@ -148,9 +148,9 @@
       (is (= [:calculate-value]
              (map pipeline/step-name (pipeline/failed-steps run))))
 
-      (is (= :invalid-output (-> run pipeline/failed-step pipeline/failure-reason)))
-      (is (= "oopsie" (-> run pipeline/failed-step pipeline/failure-message
-                          (get-in [:clojure.spec.alpha/problems 0 :val])))))))
+      (is (= :invalid-output (-> run pipeline/failed-step pipeline/failure-reason))))))
+      ;(is (= "oopsie" (-> run pipeline/failed-step pipeline/failure-message
+      ;                    (get-in [:clojure.spec.alpha/problems 0 :val]))))))
 
 (deftest pipeline-bindings-test
   (with-redefs [get-exchange-rates! (fn [base-url date base symbols]
