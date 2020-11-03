@@ -29,7 +29,7 @@
 (def registry (merge (m/default-schemas) (mu/schemas)))
 
 (def schema-path
-  [:or keyword? [:sequential keyword?]])
+  [:or [:sequential any?] any?])
 
 (def schema-paths
   [:sequential schema-path])

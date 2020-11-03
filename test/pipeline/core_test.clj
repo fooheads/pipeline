@@ -233,6 +233,48 @@
     (is (= p1 p4))
     (is (= p2 p3))))
 
+(deftest path-test
+  (let [pl
+        (pipeline/make-pipeline
+         {}
+         (pipeline/transformation
+           :simple #'identity [:simple] [:result :simple])
+
+         (pipeline/transformation
+           :simple-vector #'identity [[:simple]] [:result :simple-vector])
+
+         (pipeline/transformation
+           :m1 #'identity [[:some-map "ex1"]] [:result :m1])
+
+         (pipeline/transformation
+           :m2 #'identity [[:some-map :ex2]] [:result :m2])
+
+         (pipeline/transformation
+           :m3 #'identity [[:some-map 3]] [:result :m3])
+
+         (pipeline/transformation
+           :v0 #'identity [[:some-vector 0]] [:result :v0])
+
+         (pipeline/transformation
+           :v3 #'identity [[:some-vector 3]] [:result :v3])
+
+         (pipeline/transformation :res #'identity [:result] [:result]))]
+
+
+    (is (= {:simple 0
+            :simple-vector 0
+            :m1 1
+            :m2 2
+            :m3 3
+            :v0 :a
+            :v3 :d}
+           (pipeline/result
+             (pipeline/run-pipeline
+              pl
+              {:simple 0
+               :some-map {"ex1" 1 :ex2 2 3 3}
+               :some-vector [:a :b :c :d]}))))))
+
 
 
 
