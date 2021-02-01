@@ -4,7 +4,7 @@
     ;[clojure.spec.alpha :as s]
     [clojure.string :as str]
     [pipeline.core :as pipeline]
-    [pipeline.print :refer :all]))
+    [pipeline.print :refer [print-run]]))
 
 (defn db-execute!
   "A thin wrapper around jdbc/execute! that is callable with sql statement separated from the args"
@@ -109,7 +109,8 @@
     (is (false? (pipeline/successful? run)))
     (is (false? (pipeline/failed? run)))
 
-    (is (true? (every? pipeline/not-started? (pipeline/steps run))))))
+    (is (true? (every? pipeline/not-started? (pipeline/steps run))))
+    (is (nil? (pipeline/args run)))))
 
 (deftest successful-pipeline
   (let [run (pipeline/run-pipeline example-pipeline args)]
@@ -118,17 +119,20 @@
     (is (true? (pipeline/successful? run)))
     (is (false? (pipeline/failed? run)))
     (is (empty? (pipeline/failed-steps run)))
-    (is (= 1855.3073327623074 (pipeline/result run)))))
+    (is (= 1855.3073327623074 (pipeline/result run)))
+    (is (= args (pipeline/args run)))))
 
 (deftest failed-pipeline-exception
   (with-redefs [db-execute! (fn [& args] (throw (ex-info "Problem!" {:some :problem})))]
-    (let [run (pipeline/run-pipeline example-pipeline {})]
+    (let [args {}
+          run (pipeline/run-pipeline example-pipeline args)]
       (is (= :failed (pipeline/state run)))
       (is (false? (pipeline/not-started? run)))
       (is (false? (pipeline/successful? run)))
       (is (true? (pipeline/failed? run)))
       (is (= [:get-balances-for-user]
              (map pipeline/step-name (pipeline/failed-steps run))))
+      (is (= args (pipeline/args run)))
 
       (is (= :exception (-> run pipeline/failed-step pipeline/failure-reason)))
       (is (= "Problem!" (-> run pipeline/failed-step pipeline/failure-message)))
@@ -147,6 +151,7 @@
       (is (true? (pipeline/failed? run)))
       (is (= [:calculate-value]
              (map pipeline/step-name (pipeline/failed-steps run))))
+      (is (= args (pipeline/args run)))
 
       (is (= :invalid-output (-> run pipeline/failed-step pipeline/failure-reason))))))
       ;(is (= "oopsie" (-> run pipeline/failed-step pipeline/failure-message
@@ -274,6 +279,7 @@
               {:simple 0
                :some-map {"ex1" 1 :ex2 2 3 3}
                :some-vector [:a :b :c :d]}))))))
+
 
 
 

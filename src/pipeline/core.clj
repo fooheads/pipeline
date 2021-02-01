@@ -140,6 +140,13 @@
     (:pipeline/bindings pipeline-or-step)))
 
 
+(defn args
+  "Returns the args used when run-pipeline was called on this pipeline.
+  Will return nil on a pipeline that has not been started"
+  [pipeline]
+  (:pipeline/args pipeline))
+
+
 (defn validation-functions
   "Returns the validation functions for a step"
   [step]
@@ -336,7 +343,7 @@
    ;; TODO: validate args
 
    (loop [state (merge (bindings pipeline) args)
-          pipeline pipeline]
+          pipeline (assoc pipeline :pipeline/args args)]
      (if (pipeline-finished? pipeline)
        (do
          (def *pipeline pipeline)
