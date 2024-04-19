@@ -1,4 +1,5 @@
 .conjure.edn
 .cpcache/
 .hide-port
+dev/playground*
 target
