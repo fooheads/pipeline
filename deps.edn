@@ -1,5 +1,5 @@
 {:deps
- {metosin/malli {:mvn/version "0.2.1"}}
+ {metosin/malli {:mvn/version "0.15.0"}}
 
  :aliases
  {:dev
