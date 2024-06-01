@@ -244,13 +244,15 @@
     (result (last (steps pipeline-or-step)))))
 
 
+(defn- time-spent [start-time stop-time]
+  (/ (double (- stop-time start-time)) 1000000.0))
+
+
 (defn run-step [f args output-schema state validation-fns options]
   "Runs a single step. This is called from run-pipeline and normally not used directly,
   but is still public since it can be useful during development."
 
-  (let [time-spent (fn [start-time stop-time]
-                     (/ (double (- stop-time start-time)) 1000000.0))
-        start-time (System/nanoTime)
+  (let [start-time (System/nanoTime)
         spec (if output-schema (resolve-spec output-schema))
         valid? (get validation-fns :valid?)
         explain (get validation-fns :explain)
@@ -320,6 +322,14 @@
         path (if (keyword? output-path) [output-path] output-path)]
     (assoc-in state path (:pipeline.step/result step))))
 
+(defn last-executed-step [pipeline]
+  (->>
+    pipeline
+    :pipeline/steps
+    reverse
+    (drop-while #(= :not-started (:pipeline.step/state %)))
+    (first)))
+
 (defn run-pipeline
   "Executes a pipeline and returns the full execution context as a result. In the execution context,
   result and errors can be found, but also a full trace of each step's input, result and time spent.
@@ -342,24 +352,53 @@
 
    ;; TODO: validate args
 
-   (loop [state (merge (bindings pipeline) args)
-          pipeline (assoc pipeline :pipeline/args args)]
-     (if (pipeline-finished? pipeline)
-       (do
-         (def *pipeline pipeline)
-         pipeline)
-       (let [step (next-step pipeline)
-             bindings (bindings step)
-             state (merge state bindings)
-             f (:pipeline.step/function step)
-             args (args-for-step step state)
-             output-schema (:pipeline.step/output-schema step)
-             validation-fns (:pipeline.step/validation-fns step)
-             result (run-step f args output-schema state validation-fns options)
-             step' (update-step step args result)
-             pipeline' (update-pipeline pipeline step')
-             state' (update-state state step')]
-         (recur state' pipeline'))))))
+   (let [start-time (System/nanoTime)
+
+         executed-pipeline
+         (loop [state (merge (bindings pipeline) args)
+                pipeline (assoc pipeline :pipeline/args args)]
+          (if (pipeline-finished? pipeline)
+            (do
+              (def *pipeline pipeline)
+              pipeline)
+            (let [step (next-step pipeline)
+                  bindings (bindings step)
+                  state (merge state bindings)
+                  f (:pipeline.step/function step)
+                  args (args-for-step step state)
+                  output-schema (:pipeline.step/output-schema step)
+                  validation-fns (:pipeline.step/validation-fns step)
+                  result (run-step f args output-schema state validation-fns options)
+                  step' (update-step step args result)
+                  pipeline' (update-pipeline pipeline step')
+                  state' (update-state state step')]
+              (recur state' pipeline'))))
+
+         result-step (last-executed-step executed-pipeline)
+
+         result
+         (cond
+           (successful? result-step)
+           {:pipeline/state           (:pipeline.step/state result-step)
+            :pipeline/result          (:pipeline.step/result result-step)}
+
+           (failed? result-step)
+           {:pipeline/state           (:pipeline.step/state result-step)
+            :pipeline/failure-reason  (:pipeline.step/failure-reason result-step)
+            :pipeline/failure-value   (:pipeline.step/failure-value result-step)
+            :pipeline/failure-message (:pipeline.step/failure-message result-step)}
+
+           (not-started? result-step)
+           {:pipeline/state           (:pipeline.step/state result-step)}
+
+           :else
+           {})]
+
+     (->
+       executed-pipeline
+       (merge result)
+       (assoc :pipeline/time-spent (time-spent start-time (System/nanoTime)))))))
+
 
 (def default-validation-fns pipeline.default-validations/default-validation-fns)
 
