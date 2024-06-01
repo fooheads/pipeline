@@ -43,6 +43,12 @@
     (map (partial calculate-single-value exchange-rates))
     (reduce +)))
 
+(defn get-exchange-rates-async! [_base-url _date _base _symbols]
+  (future
+    (Thread/sleep 500)
+    {:body {:base "EUR"
+            :date "2020-06-01"
+            :rates {:SEK 10.4635 :USD 1.1116}}}))
 
 (def step-get-balances-for-user  ;; with simple keywords on input paths
   (pipeline/action :get-balances-for-user #'db-execute! [:data-source :sql-query :user-id] :balances))
@@ -55,10 +61,21 @@
                    [[:get-exchange-rate-url] [:date-today] [:base-currency] [:currencies :value]]
                    :exchange-rates-response))
 
+(def step-get-exchange-rates ;; with all paths as inputs paths
+  (pipeline/action :get-exchange-rates #'get-exchange-rates!
+                   [[:get-exchange-rate-url] [:date-today] [:base-currency] [:currencies :value]]
+                   :exchange-rates-response))
+
+(def step-get-exchange-rates-async ;; with all paths as inputs paths
+  (pipeline/action :get-exchange-rates-async #'get-exchange-rates-async!
+                   [[:get-exchange-rate-url] [:date-today] [:base-currency] [:currencies :value]]
+                   :exchange-rates-response))
+
 (def step-calculate-value ;; with mixed keywords and paths as input paths
   (pipeline/transformation :calculate-value #'calculate-value
                            [:balances [:exchange-rates-response :body :rates]]
                            :value double?))
+
 
 (def steps
   [step-get-balances-for-user
@@ -73,6 +90,15 @@
     step-extract-currencies
     step-get-exchange-rates
     step-calculate-value))
+
+(def example-async-pipeline
+  (pipeline/make-pipeline
+    {}
+    step-get-balances-for-user
+    step-extract-currencies
+    step-get-exchange-rates-async
+    step-calculate-value))
+
 
 (pipeline/steps example-pipeline)
 
@@ -156,6 +182,16 @@
       (is (= :invalid-output (-> run pipeline/failed-step pipeline/failure-reason))))))
       ;(is (= "oopsie" (-> run pipeline/failed-step pipeline/failure-message
       ;                    (get-in [:clojure.spec.alpha/problems 0 :val]))))))
+
+(deftest successful-async-pipeline
+  (let [run (pipeline/run-pipeline example-async-pipeline args)]
+    (is (= :successful (pipeline/state run)))
+    (is (false? (pipeline/not-started? run)))
+    (is (true? (pipeline/successful? run)))
+    (is (false? (pipeline/failed? run)))
+    (is (empty? (pipeline/failed-steps run)))
+    (is (= 1855.3073327623074 (pipeline/result run)))
+    (is (= args (pipeline/args run)))))
 
 (deftest pipeline-bindings-test
   (with-redefs [get-exchange-rates! (fn [base-url date base symbols]

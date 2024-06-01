@@ -282,13 +282,26 @@
         :pipeline.step/failure-value e
         :pipeline.step/failure-message (.getMessage e)}))))
 
+(defn- get-in-deref
+  "Like get-in, but derefs each key recursively in case there is a future."
+  ([m ks]
+   (get-in-deref m ks nil))
 
+  ([m ks not-found]
+   (let [[k & ks] ks
+         v (get m k)
+         realized-value (if (future? v) (deref v) v)]
+     (if (nil? realized-value)
+       not-found
+       (if (seq ks)
+         (get-in-deref realized-value ks not-found)
+         realized-value)))))
 
 (defn args-for-step [step state]
   (map
     (fn [input-path]
       (let [path (if (keyword? input-path) [input-path] input-path)]
-        (get-in state path)))
+        (get-in-deref state path)))
     (:pipeline.step/input-paths step)))
 
 (defn pipeline-finished? [pipeline]
