@@ -297,12 +297,13 @@
          (get-in-deref realized-value ks not-found)
          realized-value)))))
 
-(defn args-for-step [step state]
-  (map
-    (fn [input-path]
-      (let [path (if (keyword? input-path) [input-path] input-path)]
-        (get-in-deref state path)))
-    (:pipeline.step/input-paths step)))
+(defn args-for-step [step state options]
+  (let [get-in-fn (if (:args-can-hold-futures options) get-in-deref get-in)]
+    (map
+      (fn [input-path]
+        (let [path (if (keyword? input-path) [input-path] input-path)]
+          (get-in-fn state path)))
+      (:pipeline.step/input-paths step))))
 
 (defn pipeline-finished? [pipeline]
   (or
@@ -378,7 +379,7 @@
                   bindings (bindings step)
                   state (merge state bindings)
                   f (:pipeline.step/function step)
-                  args (args-for-step step state)
+                  args (args-for-step step state options)
                   output-schema (:pipeline.step/output-schema step)
                   validation-fns (:pipeline.step/validation-fns step)
                   result (run-step f args output-schema state validation-fns options)

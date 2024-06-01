@@ -184,7 +184,8 @@
       ;                    (get-in [:clojure.spec.alpha/problems 0 :val]))))))
 
 (deftest successful-async-pipeline
-  (let [run (pipeline/run-pipeline example-async-pipeline args)]
+  (let [run (pipeline/run-pipeline example-async-pipeline args
+                                   {:args-can-hold-futures true})]
     (is (= :successful (pipeline/state run)))
     (is (false? (pipeline/not-started? run)))
     (is (true? (pipeline/successful? run)))
