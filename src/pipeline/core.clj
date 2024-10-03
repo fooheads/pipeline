@@ -2,17 +2,17 @@
   "The core of pipeline. This is where the definition and running
   of the pipelines exists."
   (:require
-    [clojure.set :as set]
-    [clojure.string :as str]
-    [clojure.pprint :refer [pprint print-table]]
     [malli.core :as m]
     [malli.util :as mu]
     [pipeline.default-validations]))
 
-(defn resolve-spec [var-or-any]
+
+(defn resolve-spec
+  [var-or-any]
   (if (var? var-or-any)
     (var-get var-or-any)
     var-or-any))
+
 
 ;;
 ;; Ideas
@@ -26,26 +26,31 @@
 ;; Malli schemas
 ;;
 
+
 (def registry (merge (m/default-schemas) (mu/schemas)))
+
 
 (def schema-path
   [:or [:sequential any?] any?])
 
+
 (def schema-paths
   [:sequential schema-path])
 
+
 (def schema-step-not-started
   [:map
-   [:pipeline.step/bindings :map]                ;; keyword / any?
+   [:pipeline.step/bindings :map]                ; keyword / any?
    [:pipeline.step/state [:enum :not-started :successful :failed]]
    [:pipeline.step/seq-id :int]
    [:pipeline.step/name :keyword]
    [:pipeline.step/type [:enum :action :transformation]]
-   [:pipeline.step/function any?]                ;; :fn
+   [:pipeline.step/function any?]                ; :fn
    [:pipeline.step/input-paths schema-paths]
    [:pipeline.step/output-path schema-path]
    [:pipeline.step/output-schema any?]
-   [:pipeline.step/validation-fns :map]])        ;; keyword / ifn?]])
+   [:pipeline.step/validation-fns :map]])        ; keyword / ifn?]])
+
 
 (def schema-step
   [:multi {:dispatch :pipeline.step/state}
@@ -53,18 +58,24 @@
    [:successful schema-step-not-started]
    [:failed schema-step-not-started]])
 
+
 (def schema-steps
   [:sequential schema-step])
+
 
 (def schema-pipeline
   [:map
    [:pipeline/steps [:sequential schema-step]]])
 
+
 (def ^:private step-validator (m/validator schema-step))
 (def ^:private steps-validator (m/validator schema-steps))
 (def ^:private pipeline-validator (m/validator schema-pipeline))
 
-(def *pipeline "Memory for last pipline executed" nil)
+
+(def *pipeline
+  "Memory for last pipline executed"
+  nil)
 
 
 (defn last-run
@@ -82,7 +93,7 @@
 (defn step?
   "Returns true if given a valid step"
   [pipeline]
-  ;(m/validate schema-step pipeline))    ;; Very notable performance differenece
+  ;; (m/validate schema-step pipeline))    ;; Very notable performance differenece
   (step-validator pipeline))
 
 
@@ -90,13 +101,6 @@
   "Returns true is given a vector of steps"
   [pipeline]
   (steps-validator pipeline))
-
-
-(defn- kind [pipeline-or-step]
-  (cond
-    (pipeline? pipeline-or-step) :pipeline
-    (step? pipeline-or-step) :step
-    :else :unknown))
 
 
 (defn steps
@@ -130,7 +134,7 @@
 (defn bindings
   "Returns the bindings of a pipeline or a step."
   [pipeline-or-step]
-  ;{:post [(s/valid? ::bindings %)]}
+  ;; {:post [(s/valid? ::bindings %)]}
 
   (cond
     (step? pipeline-or-step)
@@ -156,7 +160,7 @@
 (defn state
   "Returns the state of a pipeline or a step."
   [pipeline-or-step]
-  ; {:post [(s/valid? ::state %)]}
+  ;; {:post [(s/valid? ::state %)]}
 
   (cond
     (step? pipeline-or-step)
@@ -171,8 +175,9 @@
         :else (throw (ex-info "Unknown state in pipeline!" {:pipeline pipeline-or-step}))))))
 
 
-(defn state? [state-value pipeline-or-step]
+(defn state?
   "Returns the state for a pipeline or a step"
+  [state-value pipeline-or-step]
   (boolean (= state-value (state pipeline-or-step))))
 
 
@@ -206,15 +211,18 @@
   (first (failed-steps pipeline)))
 
 
-(defn failure-reason [step]
+(defn failure-reason
+  [step]
   (:pipeline.step/failure-reason step))
 
 
-(defn failure-value [step]
+(defn failure-value
+  [step]
   (:pipeline.step/failure-value step))
 
 
-(defn failure-message [step]
+(defn failure-message
+  [step]
   (:pipeline.step/failure-message step))
 
 
@@ -225,10 +233,10 @@
   If called on a step that is not successful or a pipeline that is not successful,
   an exception is thrown."
   [pipeline-or-step]
-  (if (pipeline? pipeline-or-step)
+  (when (pipeline? pipeline-or-step)
     (result (last (steps pipeline-or-step))))
 
-  (if-not
+  (when-not
     (and
       (or (pipeline? pipeline-or-step)
           (step? pipeline-or-step))
@@ -244,16 +252,18 @@
     (result (last (steps pipeline-or-step)))))
 
 
-(defn- time-spent [start-time stop-time]
+(defn- time-spent
+  [start-time stop-time]
   (/ (double (- stop-time start-time)) 1000000.0))
 
 
-(defn run-step [f args output-schema state validation-fns options]
+(defn run-step
   "Runs a single step. This is called from run-pipeline and normally not used directly,
   but is still public since it can be useful during development."
+  [f args output-schema state validation-fns options]
 
   (let [start-time (System/nanoTime)
-        spec (if output-schema (resolve-spec output-schema))
+        spec (when output-schema (resolve-spec output-schema))
         valid? (get validation-fns :valid?)
         explain (get validation-fns :explain)
         valid-result? #(if spec (valid? state spec %) true)
@@ -263,24 +273,25 @@
       (trace-fn {:f f :args args}))
 
     (try
-     (let [result (apply f args)]
-       (if (valid-result? result)
-         {:pipeline.step/time-spent (time-spent start-time (System/nanoTime))
-          :pipeline.step/state :successful
-          :pipeline.step/result result}
+      (let [result (apply f args)]
+        (if (valid-result? result)
+          {:pipeline.step/time-spent (time-spent start-time (System/nanoTime))
+           :pipeline.step/state :successful
+           :pipeline.step/result result}
 
-         {:pipeline.step/time-spent (time-spent start-time (System/nanoTime))
-          :pipeline.step/state :failed
-          :pipeline.step/failure-reason :invalid-output
-          :pipeline.step/failure-value result
-          :pipeline.step/failure-message (explain state spec result)}))
+          {:pipeline.step/time-spent (time-spent start-time (System/nanoTime))
+           :pipeline.step/state :failed
+           :pipeline.step/failure-reason :invalid-output
+           :pipeline.step/failure-value result
+           :pipeline.step/failure-message (explain state spec result)}))
 
-     (catch Exception e
-       {:pipeline.step/time-spent (time-spent start-time (System/nanoTime))
-        :pipeline.step/state :failed
-        :pipeline.step/failure-reason :exception
-        :pipeline.step/failure-value e
-        :pipeline.step/failure-message (.getMessage e)}))))
+      (catch Exception e
+        {:pipeline.step/time-spent (time-spent start-time (System/nanoTime))
+         :pipeline.step/state :failed
+         :pipeline.step/failure-reason :exception
+         :pipeline.step/failure-value e
+         :pipeline.step/failure-message (.getMessage e)}))))
+
 
 (defn- get-in-deref
   "Like get-in, but derefs each key recursively in case there is a future."
@@ -297,7 +308,9 @@
          (get-in-deref realized-value ks not-found)
          realized-value)))))
 
-(defn args-for-step [step state options]
+
+(defn args-for-step
+  [step state options]
   (let [get-in-fn (if (:args-can-hold-futures options) get-in-deref get-in)]
     (map
       (fn [input-path]
@@ -305,44 +318,59 @@
           (get-in-fn state path)))
       (:pipeline.step/input-paths step))))
 
-(defn pipeline-finished? [pipeline]
+
+(defn pipeline-finished?
+  [pipeline]
   (or
     (every? #(= :successful (:pipeline.step/state %)) (:pipeline/steps pipeline))
     (boolean (some #(= :failed (:pipeline.step/state %)) (:pipeline/steps pipeline)))))
 
-(defn next-step [pipeline]
+
+(defn next-step
+  [pipeline]
   (some #(when (= :not-started (:pipeline.step/state %)) %) (:pipeline/steps pipeline)))
 
-(defn update-step [step args result]
+
+(defn update-step
+  [step args result]
   (merge step {:pipeline.step/args (into [] args)} result))
 
-(defn step-path [pipeline step]
-  [:pipeline/steps
-    (first
-      (keep-indexed
-        (fn [i st]
-          (when
-            (= (:pipeline.step/seq-id st)
-               (:pipeline.step/seq-id step))
-            i))
-        (:pipeline/steps pipeline)))])
 
-(defn update-pipeline [pipeline step]
+(defn step-path
+  [pipeline step]
+  [:pipeline/steps
+   (first
+     (keep-indexed
+       (fn [i st]
+         (when
+           (= (:pipeline.step/seq-id st)
+              (:pipeline.step/seq-id step))
+           i))
+       (:pipeline/steps pipeline)))])
+
+
+(defn update-pipeline
+  [pipeline step]
   (let [path (step-path pipeline step)]
     (assoc-in pipeline path step)))
 
-(defn update-state [state step]
+
+(defn update-state
+  [state step]
   (let [output-path (:pipeline.step/output-path step)
         path (if (keyword? output-path) [output-path] output-path)]
     (assoc-in state path (:pipeline.step/result step))))
 
-(defn last-executed-step [pipeline]
+
+(defn last-executed-step
+  [pipeline]
   (->>
     pipeline
     :pipeline/steps
     reverse
     (drop-while #(= :not-started (:pipeline.step/state %)))
     (first)))
+
 
 (defn run-pipeline
   "Executes a pipeline and returns the full execution context as a result. In the execution context,
@@ -371,22 +399,23 @@
          executed-pipeline
          (loop [state (merge (bindings pipeline) args)
                 pipeline (assoc pipeline :pipeline/args args)]
-          (if (pipeline-finished? pipeline)
-            (do
-              (def *pipeline pipeline)
-              pipeline)
-            (let [step (next-step pipeline)
-                  bindings (bindings step)
-                  state (merge state bindings)
-                  f (:pipeline.step/function step)
-                  args (args-for-step step state options)
-                  output-schema (:pipeline.step/output-schema step)
-                  validation-fns (:pipeline.step/validation-fns step)
-                  result (run-step f args output-schema state validation-fns options)
-                  step' (update-step step args result)
-                  pipeline' (update-pipeline pipeline step')
-                  state' (update-state state step')]
-              (recur state' pipeline'))))
+           (if (pipeline-finished? pipeline)
+             (do
+               #_:clj-kondo/ignore
+               (def *pipeline pipeline)
+               pipeline)
+             (let [step (next-step pipeline)
+                   bindings (bindings step)
+                   state (merge state bindings)
+                   f (:pipeline.step/function step)
+                   args (args-for-step step state options)
+                   output-schema (:pipeline.step/output-schema step)
+                   validation-fns (:pipeline.step/validation-fns step)
+                   result (run-step f args output-schema state validation-fns options)
+                   step' (update-step step args result)
+                   pipeline' (update-pipeline pipeline step')
+                   state' (update-state state step')]
+               (recur state' pipeline'))))
 
          result-step (last-executed-step executed-pipeline)
 
@@ -416,6 +445,7 @@
 
 (def default-validation-fns pipeline.default-validations/default-validation-fns)
 
+
 ;;
 ;; precedence nu
 ;; 1. step
@@ -434,9 +464,9 @@
 ;; 2. pipeline
 ;; 3. step
 
-;;;
-;;; Helper functions
-;;;
+;;
+;; Helper functions
+;;
 
 (defn make-step
   [step-type step-name f inputs output output-spec bindings validation-fns]
@@ -451,6 +481,7 @@
    :pipeline.step/seq-id 0
    :pipeline.step/state :not-started})
 
+
 (defn action
   ([step-name f inputs]
    (make-step :action step-name f inputs nil nil {} default-validation-fns))
@@ -463,6 +494,7 @@
   ([step-name f inputs output output-spec bindings validation-fns]
    (make-step :action step-name f inputs output output-spec bindings validation-fns)))
 
+
 (defn transformation
   ([step-name f inputs output]
    (make-step :transformation step-name f inputs output nil {} default-validation-fns))
@@ -473,11 +505,12 @@
   ([step-name f inputs output output-spec bindings validation-fns]
    (make-step :transformation step-name f inputs output output-spec bindings validation-fns)))
 
+
 (defn make-pipeline
   [pipeline-bindings & steps-and-pipelines]
-  ;(if-not (s/valid? ::bindings pipeline-bindings)
-  ;  (throw (ex-info (with-out-str (s/explain ::bindings pipeline-bindings))
-  ;                  {}))]
+  ;; (if-not (s/valid? ::bindings pipeline-bindings)
+  ;;  (throw (ex-info (with-out-str (s/explain ::bindings pipeline-bindings))
+  ;;                  {}))]
 
   (let [steps'
         (reduce
@@ -497,7 +530,7 @@
           []
           steps-and-pipelines)
 
-        ;_ (prn "steps'" steps')
+        ;; _ (prn "steps'" steps')
 
         steps''
         (->>
