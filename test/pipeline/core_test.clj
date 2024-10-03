@@ -2,8 +2,7 @@
   (:require
     [clojure.string :as str]
     [clojure.test :refer [deftest is]]
-    [pipeline.core :as pipeline]
-    [pipeline.print :refer [print-run]]))
+    [pipeline.core :as pipeline]))
 
 
 (defn db-execute!
@@ -190,7 +189,6 @@
 (deftest failed-pipeline-validation-error
   (with-redefs [calculate-value (fn [& _args] "oopsie")]
     (let [run (pipeline/run-pipeline example-pipeline args)]
-      (print-run)
       (is (= :failed (pipeline/state run)))
       (is (false? (pipeline/not-started? run)))
       (is (false? (pipeline/successful? run)))
@@ -342,4 +340,42 @@
                {:simple 0
                 :some-map {"ex1" 1 :ex2 2 3 3}
                 :some-vector [:a :b :c :d]}))))))
+
+
+(deftest scope-pipeline-test
+  (let [math-pipeline
+        (pipeline/make-pipeline
+          {}
+          (pipeline/transformation
+            :add
+            #'+
+            [:a :b]
+            :c)
+
+          (pipeline/transformation
+            :double
+            (fn [x] (* 2 x))
+            [:c]
+            :d))
+
+
+        run
+        (pipeline/run-pipeline
+          (pipeline/make-pipeline
+            {:x1 2
+             :x2 3}
+
+            (pipeline/scope-pipeline
+              [:x1 :x2]
+              [:result]
+              math-pipeline)
+
+            (pipeline/transformation
+              :str
+              #'str
+              [:result]
+              :str-result))
+          {})]
+
+    (is (= "10" (-> run (pipeline/result))))))
 

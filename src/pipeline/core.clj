@@ -309,13 +309,17 @@
          realized-value)))))
 
 
+(defn- path
+  [x]
+  (if (keyword? x) [x] x))
+
+
 (defn args-for-step
   [step state options]
   (let [get-in-fn (if (:args-can-hold-futures options) get-in-deref get-in)]
     (map
       (fn [input-path]
-        (let [path (if (keyword? input-path) [input-path] input-path)]
-          (get-in-fn state path)))
+        (get-in-fn state (path input-path)))
       (:pipeline.step/input-paths step))))
 
 
@@ -357,9 +361,8 @@
 
 (defn update-state
   [state step]
-  (let [output-path (:pipeline.step/output-path step)
-        path (if (keyword? output-path) [output-path] output-path)]
-    (assoc-in state path (:pipeline.step/result step))))
+  (let [output-path (:pipeline.step/output-path step)]
+    (assoc-in state (path output-path) (:pipeline.step/result step))))
 
 
 (defn last-executed-step
@@ -549,4 +552,36 @@
                "Invalid pipeline."
                {:pipeline pipeline
                 :explanation (m/explain schema-pipeline pipeline)})))))
+
+
+(defn scope-pipeline
+  "Scopes a pipeline to isolate it from the surrounding scope.
+
+  Scopes the input-paths and output-path for all steps, and replace the
+  first step's input-path and the last step's output-path with the 
+  provided ones."
+  [input-paths output-path & steps-and-pipelines]
+  (let [pipeline (apply make-pipeline {} steps-and-pipelines)
+        n (count (steps pipeline))
+        scope (gensym "scope-")
+        scope-path #(into [scope] (path %))
+
+        scoped-steps
+        (mapv
+          (fn [step]
+            (->
+              step
+              (update :pipeline.step/input-paths #(mapv scope-path %))
+              (update :pipeline.step/output-path scope-path)))
+
+          (steps pipeline))]
+
+    (when (< n 1)
+      (throw (ex-info "Can't scope an empty pipeline"
+                      {:steps-and-pipelines steps-and-pipelines})))
+
+    (->
+      scoped-steps
+      (update 0 assoc :pipeline.step/input-paths input-paths)
+      (update (dec n) assoc :pipeline.step/output-path output-path))))
 
