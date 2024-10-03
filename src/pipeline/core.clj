@@ -554,17 +554,29 @@
                 :explanation (m/explain schema-pipeline pipeline)})))))
 
 
+(defn- introduce-scope
+  [mapping & args]
+  (zipmap (map first mapping) args))
+
+
 (defn scope-pipeline
   "Scopes a pipeline to isolate it from the surrounding scope.
 
-  Scopes the input-paths and output-path for all steps, and replace the
-  first step's input-path and the last step's output-path with the 
-  provided ones."
-  [input-paths output-path & steps-and-pipelines]
+  Scopes the input-paths and output-path for all steps, and replace the last
+  step's output-path with the provided one."
+  [mapping output-path & steps-and-pipelines]
   (let [pipeline (apply make-pipeline {} steps-and-pipelines)
-        n (count (steps pipeline))
-        scope (gensym "scope-")
+        scope (keyword (gensym "scope-"))
         scope-path #(into [scope] (path %))
+
+        mapping-step
+        (transformation
+          scope
+          #'introduce-scope
+          (into [:mapping] (map second mapping))
+          scope
+          nil
+          {:mapping mapping})
 
         scoped-steps
         (mapv
@@ -574,14 +586,18 @@
               (update :pipeline.step/input-paths #(mapv scope-path %))
               (update :pipeline.step/output-path scope-path)))
 
-          (steps pipeline))]
+          (steps pipeline))
 
-    (when (< n 1)
+        steps
+        (vec (cons mapping-step scoped-steps))
+
+        n (count steps)]
+
+    (when (< n 2)
       (throw (ex-info "Can't scope an empty pipeline"
                       {:steps-and-pipelines steps-and-pipelines})))
 
     (->
-      scoped-steps
-      (update 0 assoc :pipeline.step/input-paths input-paths)
+      (vec (cons mapping-step scoped-steps))
       (update (dec n) assoc :pipeline.step/output-path output-path))))
 

@@ -342,6 +342,24 @@
                 :some-vector [:a :b :c :d]}))))))
 
 
+(def math-pipeline
+     (pipeline/make-pipeline
+       {}
+       (pipeline/transformation
+         :add
+         #'+
+         [:a :b]
+         :c)
+
+       (pipeline/transformation
+         :mul
+         #'*
+         [:c :i]
+         :d)))
+
+
+
+
 (deftest scope-pipeline-test
   (let [math-pipeline
         (pipeline/make-pipeline
@@ -353,9 +371,9 @@
             :c)
 
           (pipeline/transformation
-            :double
-            (fn [x] (* 2 x))
-            [:c]
+            :mul
+            #'*
+            [:c :i]
             :d))
 
 
@@ -366,7 +384,9 @@
              :x2 3}
 
             (pipeline/scope-pipeline
-              [:x1 :x2]
+              {:a :x1
+               :b :x2
+               :i :x2}
               [:result]
               math-pipeline)
 
@@ -377,5 +397,5 @@
               :str-result))
           {})]
 
-    (is (= "10" (-> run (pipeline/result))))))
+    (is (= "15" (-> run (pipeline/result))))))
 
