@@ -569,9 +569,9 @@
         scope (keyword (gensym "scope-"))
         scope-path #(into [scope] (path %))
 
-        mapping-step
+        push-scope-step
         (transformation
-          scope
+          (keyword (name scope) "push-scope")
           #'introduce-scope
           (into [:mapping] (map second mapping))
           scope
@@ -588,16 +588,22 @@
 
           (steps pipeline))
 
+        pop-scope-step
+        (transformation
+          (keyword (name scope) "pop-scope")
+          #'identity
+          (->> scoped-steps last :pipeline.step/output-path vector)
+          output-path
+          nil)
+
         steps
-        (vec (cons mapping-step scoped-steps))
+        (vec (concat [push-scope-step] scoped-steps [pop-scope-step]))
 
         n (count steps)]
 
-    (when (< n 2)
+    (when (< n 3)
       (throw (ex-info "Can't scope an empty pipeline"
                       {:steps-and-pipelines steps-and-pipelines})))
 
-    (->
-      (vec (cons mapping-step scoped-steps))
-      (update (dec n) assoc :pipeline.step/output-path output-path))))
+    steps))
 
