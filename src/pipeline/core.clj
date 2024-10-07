@@ -2,6 +2,7 @@
   "The core of pipeline. This is where the definition and running
   of the pipelines exists."
   (:require
+    [fooheads.stdlib :refer [contains-in?]]
     [malli.core :as m]
     [malli.util :as mu]
     [pipeline.default-validations]))
@@ -567,7 +568,12 @@
   [mapping output-path & steps-and-pipelines]
   (let [pipeline (apply make-pipeline {} steps-and-pipelines)
         scope (keyword (gensym "scope-"))
-        scope-path #(into [scope] (path %))
+        scope-path
+        (fn [bind p]
+          (let [path (path p)]
+            (if (contains-in? bind path)
+              path
+              (into [scope] path))))
 
         push-scope-step
         (transformation
@@ -581,10 +587,11 @@
         scoped-steps
         (mapv
           (fn [step]
-            (->
-              step
-              (update :pipeline.step/input-paths #(mapv scope-path %))
-              (update :pipeline.step/output-path scope-path)))
+            (let [scope-path' (partial scope-path (:pipeline.step/bindings step))]
+              (->
+                step
+                (update :pipeline.step/input-paths #(mapv scope-path' %))
+                (update :pipeline.step/output-path scope-path'))))
 
           (steps pipeline))
 

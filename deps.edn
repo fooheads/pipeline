@@ -1,13 +1,14 @@
 {:deps
- {metosin/malli {:mvn/version "0.15.0"}}
+ {com.fooheads/stdlib {:mvn/version "0.4.6"}
+  metosin/malli {:mvn/version "0.15.0"}}
 
  :aliases
  {:dev
   {:extra-paths ["dev"]
-   :extra-deps 
+   :extra-deps
    {fooheads/trebl {:git/url "https://github.com/fooheads/trebl.git"
                     :git/sha "64c670e316c79ab0f80583ea12375abb4a429368"}}}
-  
+
   :test
   {:extra-paths ["test"]
    :extra-deps {lambdaisland/kaocha {:mvn/version "1.0.632"}
