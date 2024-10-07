@@ -349,7 +349,7 @@
           (pipeline/transformation
             :add
             #'+
-            [:a :b]
+            [:a [:coll :b]]
             :c)
 
           (pipeline/transformation
@@ -365,11 +365,11 @@
         (pipeline/run-pipeline
           (pipeline/make-pipeline
             {:x1 2
-             :x2 3}
+             :m {:x2 3}}
 
             (pipeline/scope-pipeline
               {:a :x1
-               :b :x2}
+               [:coll :b] [:m :x2]}
               [:result]
               math-pipeline)
 
