@@ -559,7 +559,9 @@
   [mapping & args]
   (reduce
     (fn [m [dst value]]
-      (assoc-in m (path dst) value))
+      (if (empty? (path dst))
+        value
+        (assoc-in m (path dst) value)))
     {}
     (map vector (map first mapping) args)))
 

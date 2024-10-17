@@ -364,12 +364,12 @@
         run
         (pipeline/run-pipeline
           (pipeline/make-pipeline
-            {:x1 2
+            {:nums {:a 2}
              :m {:x2 3}}
 
             (pipeline/scope-pipeline
-              {:a :x1
-               [:coll :b] [:m :x2]}
+              [[[] :nums]
+               [[:coll :b] [:m :x2]]]
               [:result]
               math-pipeline)
 
