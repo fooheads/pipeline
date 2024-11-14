@@ -234,9 +234,6 @@
   If called on a step that is not successful or a pipeline that is not successful,
   an exception is thrown."
   [pipeline-or-step]
-  (when (pipeline? pipeline-or-step)
-    (result (last (steps pipeline-or-step))))
-
   (when-not
     (and
       (or (pipeline? pipeline-or-step)

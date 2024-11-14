@@ -1,7 +1,8 @@
 (ns pipeline.core-test
   (:require
     [clojure.string :as str]
-    [clojure.test :refer [deftest is]]
+    [clojure.test :refer [deftest is testing]]
+    [fooheads.test :refer [thrown-ex-data]]
     [pipeline.core :as pipeline]))
 
 
@@ -133,6 +134,17 @@
    :base-currency "EUR"})
 
 
+(defn successful-run []
+  (pipeline/run-pipeline example-pipeline args))
+
+
+(defn failed-run []
+  (with-redefs [db-execute! (fn [& _args]
+                              (throw (ex-info "Problem!" {:some :problem})))]
+    (pipeline/run-pipeline example-pipeline {})))
+
+
+
 (deftest pipeline?-test
   (is (true? (pipeline/pipeline? example-pipeline)))
   (is (false? (pipeline/pipeline? (-> example-pipeline pipeline/steps first)))))
@@ -184,6 +196,24 @@
       (let [e (-> run pipeline/failed-step pipeline/failure-value)]
         (is (= "Problem!" (.getMessage e)))
         (is (= {:some :problem} (ex-data e)))))))
+
+
+(deftest result-test
+  (testing "result on a successful pipeline should return value of last step"
+    (is (= 1855.3073327623074 (pipeline/result (successful-run)))))
+
+  (testing "result on a failed pipeline should throw the failed pipeline"
+    (let [error-data (thrown-ex-data (pipeline/result (failed-run)))]
+      (is (pipeline/pipeline? (:value error-data)))))
+
+  (testing "result on a successful step should return value of the step"
+    (is (= 1855.3073327623074
+           (pipeline/result (last (pipeline/steps (successful-run)))))))
+
+  (testing "result on a failed step should throws the failed step"
+    (let [error-data
+          (thrown-ex-data (pipeline/result (pipeline/failed-step (failed-run))))]
+      (is (pipeline/step? (:value error-data))))))
 
 
 (deftest failed-pipeline-validation-error
